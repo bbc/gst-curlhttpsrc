@@ -662,6 +662,7 @@ gst_curl_http_src_curl_multi_loop(gpointer thread_data)
 						GSTCURL_MULTI_LOOP_STATE_QUEUE_EVENT) ||
 						(curl_multi_loop_signal_state ==
 								GSTCURL_MULTI_LOOP_STATE_REQUEST_REMOVAL)) {
+					g_mutex_unlock(curl_multi_loop_signal_mutex);
 					continue;
 				}
 				else {
