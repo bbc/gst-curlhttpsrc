@@ -559,6 +559,12 @@ gst_curl_http_src_curl_multi_loop(gpointer thread_data)
 			queue_element = request_queue;
 			exit_cond = FALSE;
 
+			/*
+			 * Use the running mutex to lock access to each element, as the
+			 * mutex's memory barriers stop cache optimisations from meaning
+			 * flag values can't be trusted. The trylock will only let us in
+			 * once and should fail immediately prior.
+			 */
 			while(queue_element != NULL) {
 				/*if(g_mutex_trylock(queue_element->running) == TRUE) {*/
 				if(gst_curl_try_mutex(queue_element->running) == TRUE) {
@@ -734,6 +740,10 @@ gst_curl_http_src_curl_multi_loop(gpointer thread_data)
 	}
 }
 
+/*
+ * Use our own function for mutex locking because the glib implementation has
+ * no concept of failing gracefully and a SIGABRT really ruins your day.
+ */
 static gboolean
 gst_curl_try_mutex(GMutex* gmutex) {
 	pthread_mutex_t *pmutex;
