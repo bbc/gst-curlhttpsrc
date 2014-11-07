@@ -45,6 +45,7 @@ GST_DEBUG_CATEGORY_STATIC (gst_curl_loop_debug);
 		curl_easy_setopt(handle,type,option); \
 	} \
 
+#define GSTCURL_ASSERT_MUTEX(x) if(g_atomic_pointer_get(&x->p) == NULL) GSTCURL_DEBUG_PRINT("ASSERTION: No valid mutex handle in GMutex %p", x);
 
 struct {
 
