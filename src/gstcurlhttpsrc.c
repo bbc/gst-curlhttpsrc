@@ -862,7 +862,7 @@ gst_curl_http_src_make_request(GstCurlHttpSrc *s)
 		}
 		element->next->p = s;
 		element->next->running = g_malloc(sizeof(GMutex));
-		g_mutex_init(request_queue->next->running);
+		g_mutex_init(element->next->running);
 		element->next->next = NULL;
 	}
 
