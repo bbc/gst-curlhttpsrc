@@ -645,6 +645,9 @@ gst_curl_http_src_curl_multi_loop(gpointer thread_data)
 							GSTCURL_RETURN_DONE) == FALSE) {
 						GSTCURL_WARNING_PRINT("Couldn't signal to calling thread!");
 					}
+					/* A hack, but I have seen curl_message->easy_handle being
+					 * NULL randomly, so check for that. */
+					if (curl_message->easy_handle == NULL) { break; }
 					curl_multi_remove_handle(multi_handle,
 							curl_message->easy_handle);
 				}
