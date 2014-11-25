@@ -86,6 +86,7 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
 	GObjectClass *gobject_class;
 	GstElementClass *gstelement_class;
 	GstPushSrcClass *gstpushsrc_class;
+	const gchar	*http_env;
 
 	gobject_class = (GObjectClass *) klass;
 	gstelement_class = (GstElementClass *) klass;
@@ -99,6 +100,17 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
 
 	gst_element_class_add_pad_template(gstelement_class,
 			gst_static_pad_template_get(&srcpadtemplate));
+
+	gst_curl_http_src_curl_capabilities = curl_version_info(CURLVERSION_NOW);
+	http_env = g_getenv("GST_CURL_HTTP_VER");
+	if(http_env != NULL) {
+		pref_http_ver = (gfloat) g_ascii_strtod(http_env, NULL);
+		GST_INFO_OBJECT(klass, "Seen env var GST_CURL_HTTP_VER with value %.1f",
+				pref_http_ver);
+	}
+	else {
+		pref_http_ver = 1.1;
+	}
 
 	/*
 	 * Set the default user-agent string.
@@ -182,6 +194,24 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
 			GSTCURL_DEFAULT_CONNECTIONS_GLOBAL,
 			G_PARAM_CONSTRUCT_ONLY | G_PARAM_READWRITE));
 
+	if(gst_curl_http_src_curl_capabilities->features && CURL_VERSION_HTTP2) {
+		GST_INFO_OBJECT(klass, "Our curl version (%s) supports HTTP2!",
+				gst_curl_http_src_curl_capabilities->version);
+		g_object_class_install_property(gobject_class, PROP_HTTPVERSION,
+			g_param_spec_float("http-version", "HTTP-Version",
+				"The preferred HTTP protocol version (Supported 1.0, 1.1, 2.0)",
+				1.0, 2.0, pref_http_ver,
+				G_PARAM_CONSTRUCT_ONLY | G_PARAM_READWRITE));
+	}
+	else {
+		if(pref_http_ver > 1.1) {pref_http_ver = 1.1;}
+		g_object_class_install_property(gobject_class, PROP_HTTPVERSION,
+			g_param_spec_float("http-version", "HTTP-Version",
+				"The preferred HTTP protocol version (Supported 1.0, 1.1)",
+				1.0, 1.1, pref_http_ver,
+				G_PARAM_CONSTRUCT_ONLY | G_PARAM_READWRITE));
+	}
+
 	/* Add a debugging task so it's easier to debug in the Multi worker thread */
 	GST_DEBUG_CATEGORY_INIT (gst_curl_loop_debug, "curl_multi_loop", 0,
 			"libcURL loop thread debugging");
@@ -214,6 +244,7 @@ static void
 gst_curl_http_src_set_property (GObject * object, guint prop_id,
 		const GValue * value, GParamSpec * pspec)
 {
+	gfloat f;
 	GstCurlHttpSrc *source = GST_CURLHTTPSRC (object);
 	  GSTCURL_FUNCTION_ENTRY(source);
 
@@ -262,6 +293,21 @@ gst_curl_http_src_set_property (GObject * object, guint prop_id,
 	  case PROP_MAXCONCURRENT_GLOBAL:
 		  source->max_conns_global = g_value_get_uint(value);
 		  break;
+	  case PROP_HTTPVERSION:
+		  f = g_value_get_float(value);
+		  if (f == 1.0) {
+			  source->preferred_http_version = GSTCURL_HTTP_VERSION_1_0;
+		  }
+		  else if (f == 1.1) {
+		  	  source->preferred_http_version = GSTCURL_HTTP_VERSION_1_1;
+		  }
+		  else if (f == 2.0) {
+		  	  source->preferred_http_version = GSTCURL_HTTP_VERSION_2_0;
+		  }
+		  else {
+			  source->preferred_http_version = GSTCURL_HTTP_VERSION_1_1;
+		  }
+		  break;
 	  default:
 	      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
 	      break;
@@ -309,6 +355,21 @@ gst_curl_http_src_get_property (GObject * object, guint prop_id,
 		break;
 	case PROP_MAXCONCURRENT_GLOBAL:
 		g_value_set_uint(value, source->max_conns_global);
+		break;
+	case PROP_HTTPVERSION:
+		switch(source->preferred_http_version) {
+		case GSTCURL_HTTP_VERSION_1_0:
+			g_value_set_float(value, 1.0);
+			break;
+		case GSTCURL_HTTP_VERSION_1_1:
+			g_value_set_float(value, 1.1);
+			break;
+		case GSTCURL_HTTP_VERSION_2_0:
+			g_value_set_float(value, 2.0);
+			break;
+		default:
+			GST_WARNING_OBJECT(source, "Bad HTTP version in object");
+		}
 		break;
 	default:
 	    G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -837,13 +898,16 @@ gst_curl_http_src_create_easy_handle(GstCurlHttpSrc *s)
 
 	switch (s->preferred_http_version) {
 	case GSTCURL_HTTP_VERSION_1_0:
+		GST_DEBUG_OBJECT(s, "Setting version as HTTP/1.0");
 		gst_curl_setopt_int(handle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
 		break;
 	case GSTCURL_HTTP_VERSION_1_1:
+		GST_DEBUG_OBJECT(s, "Setting version as HTTP/1.1");
 		gst_curl_setopt_int(handle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
 		break;
 	case GSTCURL_HTTP_VERSION_2_0:
-		gst_curl_setopt_int(handle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_0);
+		GST_DEBUG_OBJECT(s, "Setting version as HTTP/2.0");
+		curl_easy_setopt(handle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_0);
 		break;
 	default:
 		/* TODO Print a dodgy or as yet unimplemented option! */

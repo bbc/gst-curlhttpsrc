@@ -218,9 +218,12 @@ enum
   PROP_MAXCONCURRENT_SERVER,
   PROP_MAXCONCURRENT_PROXY,
   PROP_MAXCONCURRENT_GLOBAL,
+  PROP_HTTPVERSION,
   PROP_MAX
 };
 
+static curl_version_info_data*	gst_curl_http_src_curl_capabilities;
+static gfloat					pref_http_ver;
 static gchar*					gst_curl_http_src_default_useragent;
 
 /*
