@@ -601,6 +601,9 @@ gst_curl_http_src_curl_multi_loop(gpointer thread_data)
 
 	multi_handle = curl_multi_init();
 
+	curl_multi_setopt(multi_handle, CURLMOPT_PIPELINING, 1);
+	curl_multi_setopt(multi_handle, CURLMOPT_MAX_HOST_CONNECTIONS, 1);
+
 	request_queue_mutex = g_malloc(sizeof(GMutex));
 	if(request_queue_mutex == NULL) {
 		GSTCURL_ERROR_PRINT("Couldn't malloc request_queue_mutex!");
