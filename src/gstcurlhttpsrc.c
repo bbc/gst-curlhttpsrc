@@ -50,13 +50,30 @@
 /**
  * SECTION:element-curlhttpsrc
  *
- * FIXME:Describe curlhttpsrc here.
+ * This plugin reads data from a remote location specified by a URI, when the
+ * protocol is 'http' or 'https'.
+ *
+ * It is based on the cURL project (http://curl.haxx.se/) and is specifically
+ * designed to be also used with nghttp2 (http://nghttp2.org) to enable HTTP/2
+ * support for GStreamer. Your libcurl library MUST be compiled against nghttp2
+ * for HTTP/2 support for this functionality. HTTPS support is dependent on
+ * cURL being built with SSL support (OpenSSL/PolarSSL/NSS/GnuTLS).
+ *
+ * An HTTP proxy must be specified by URL.
+ * If the "http_proxy" environment variable is set, its value is used.
+ * The #GstCurlHttpSrc:proxy property can be used to override the default.
  *
  * <refsect2>
  * <title>Example launch line</title>
  * |[
+ * gst-launch-1.0 curlhttpsrc location=http://127.0.1.1/index.html ! fakesink dump=1
+ * ]| The above pipeline reads a web page from the local machine using HTTP and
+ * dumps it to stdout.
+ * |[
  * gst-launch-1.0 playbin uri=http://rdmedia.bbc.co.uk/dash/testmpds/multiperiod/bbb.php
- * ]|
+ * ]| The above pipeline will start up a DASH streaming session from the given
+ * MPD file. This requires GStreamer to have been built with dashdemux from
+ * gst-plugins-bad.
  * </refsect2>
  */
 
