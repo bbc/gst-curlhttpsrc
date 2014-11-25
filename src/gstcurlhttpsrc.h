@@ -52,6 +52,7 @@
 
 #include <gst/gst.h>
 #include <string.h>
+#include <ctype.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <gst/base/gstpushsrc.h>
@@ -268,6 +269,7 @@ static void inline gst_curl_http_src_recurse_queue_cleanup(
 static void gst_curl_http_src_request_remove(GstCurlHttpSrc* src);
 
 static gboolean gst_curl_try_mutex(GMutex* gmutex);
+static char* gst_curl_http_src_strcasestr(const char* haystack, const char* needle);
 
 G_END_DECLS
 

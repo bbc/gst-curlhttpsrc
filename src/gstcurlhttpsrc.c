@@ -1054,7 +1054,7 @@ gst_curl_http_src_get_header(void *header, size_t size, size_t nmemb,
 	 *
 	 * So just parse for those!
 	 */
-	substr = strstr(header, "Content-Type: ");
+	substr = gst_curl_http_src_strcasestr(header, "Content-Type: ");
 	if(substr != NULL) {
 		/*Length of stuff we don't need is 14 bytes*/
 		substr += 14;
@@ -1082,6 +1082,42 @@ gst_curl_http_src_get_header(void *header, size_t size, size_t nmemb,
 		}
 	}
 	return size*nmemb;
+}
+
+/*
+ * My own quick and dirty implementation of strcasestr. This is a GNU extension
+ * (i.e. not portable) and not always guaranteed to be available.
+ *
+ * I know this doesn't work if the haystack and needle are the same size. But
+ * this isn't necessarily a bad thing, as the only place we currently use this
+ * is at a point where returning nothing even if a string match occurs but the
+ * needle is the same size as the haystack actually saves us time.
+ */
+static char*
+gst_curl_http_src_strcasestr(const char* haystack, const char* needle)
+{
+	int i, j, needle_len;
+	char* location;
+
+	needle_len = (int) strlen(needle);
+	i = 0;
+	j = 0;
+	location = NULL;
+
+	while(haystack[i] != '\0') {
+		if(j == needle_len) {
+			location = (char*) haystack + (i - j);
+		}
+		if(tolower(haystack[i]) == tolower(needle[j])) {
+			j++;
+		}
+		else {
+			j = 0;
+		}
+		i++;
+	}
+
+	return location;
 }
 
 /*
