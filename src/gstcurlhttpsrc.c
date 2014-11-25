@@ -136,11 +136,25 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
 
 	g_object_class_install_property (gobject_class, PROP_URI,
 		g_param_spec_string ("uri", "URI", "URI of resource requested",
-			"", G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+			GSTCURL_HANDLE_DEFAULT_CURLOPT_URL,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
 	g_object_class_install_property (gobject_class, PROP_PROXYURI,
 		g_param_spec_string ("proxy", "Proxy", "URI of HTTP/S proxy server",
-			"", G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+			GSTCURL_HANDLE_DEFAULT_CURLOPT_PROXY,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+	g_object_class_install_property (gobject_class, PROP_PROXYUSERNAME,
+		g_param_spec_string ("proxy-username", "Proxy-Username",
+			"Username to supply to proxy server",
+			GSTCURL_HANDLE_DEFAULT_CURLOPT_PROXYUSERNAME,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+	g_object_class_install_property (gobject_class, PROP_PROXYPASSWORD,
+			g_param_spec_string ("proxy-password", "Proxy-Password",
+				"Password to supply to proxy server",
+				GSTCURL_HANDLE_DEFAULT_CURLOPT_PROXYPASSWORD,
+				G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
 	g_object_class_install_property (gobject_class, PROP_COOKIES,
 		g_param_spec_boxed ("cookies", "Cookies", "List of HTTP Cookies",
@@ -154,18 +168,21 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
 	g_object_class_install_property (gobject_class, PROP_REDIRECT,
 		g_param_spec_boolean ("automatic-redirect", "automatic-redirect",
 			"Allow HTTP Redirections (HTTP Status Code 300 series)",
-			FALSE, G_PARAM_READWRITE));
+			GSTCURL_HANDLE_DEFAULT_CURLOPT_FOLLOWLOCATION,
+			G_PARAM_READWRITE));
 
 	g_object_class_install_property (gobject_class, PROP_MAXREDIRECT,
 		g_param_spec_int ("max-redirect", "Max-Redirect",
 			"Maximum number of permitted redirections. -1 is unlimited.",
-			GSTCURL_MIN_REDIRECTIONS, GSTCURL_MAX_REDIRECTIONS, -1,
+			GSTCURL_HANDLE_MIN_CURLOPT_MAXREDIRS,
+			GSTCURL_HANDLE_MAX_CURLOPT_MAXREDIRS,
+			GSTCURL_HANDLE_DEFAULT_CURLOPT_MAXREDIRS,
 			G_PARAM_READWRITE));
 
 	g_object_class_install_property (gobject_class, PROP_KEEPALIVE,
 		g_param_spec_boolean ("keep-alive", "Keep-Alive",
 			"Toggle keep-alive for connection reuse.",
-			TRUE, G_PARAM_READWRITE));
+			GSTCURL_HANDLE_DEFAULT_CURLOPT_TCP_KEEPALIVE, G_PARAM_READWRITE));
 
 	g_object_class_install_property (gobject_class, PROP_CONNECTIONMAXTIME,
 		g_param_spec_uint ("max-connection-time", "Max-Connection-Time",
