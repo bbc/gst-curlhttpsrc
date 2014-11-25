@@ -100,6 +100,25 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
 	gst_element_class_add_pad_template(gstelement_class,
 			gst_static_pad_template_get(&srcpadtemplate));
 
+	/*
+	 * Set the default user-agent string.
+	 *
+	 * This takes the form:
+	 * 		GStreamer curlhttpsrc libcurl/<curlver>
+	 *
+	 * e.g.:
+	 * 		GStreamer curlhttpsrc libcurl/7.39.0
+	 * 		^-------Total chars=29-------^
+	 */
+	gst_curl_http_src_default_useragent = g_malloc(sizeof(gchar) *
+			(30 + strlen(gst_curl_http_src_curl_capabilities->version)));
+	snprintf(gst_curl_http_src_default_useragent,
+			(29 + strlen(gst_curl_http_src_curl_capabilities->version)),
+			"GStreamer curlhttpsrc libcurl/%s",
+			gst_curl_http_src_curl_capabilities->version);
+	GST_DEBUG_OBJECT(klass, "Setting default User-Agent string as \"%s\"",
+			gst_curl_http_src_default_useragent);
+
 	gobject_class->set_property = gst_curl_http_src_set_property;
 	gobject_class->get_property = gst_curl_http_src_get_property;
 
@@ -117,7 +136,8 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
 
 	g_object_class_install_property (gobject_class, PROP_USERAGENT,
 		g_param_spec_string ("user-agent", "User-Agent", "URI of resource requested",
-			"", G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+			GSTCURL_HANDLE_DEFAULT_CURLOPT_USERAGENT,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
 	g_object_class_install_property (gobject_class, PROP_REDIRECT,
 		g_param_spec_boolean ("automatic-redirect", "automatic-redirect",
@@ -309,6 +329,7 @@ gst_curl_http_src_init (GstCurlHttpSrc * source)
 	source->proxy_user = NULL;
 	source->proxy_pass = NULL;
 	source->cookies = NULL;
+	source->user_agent = NULL;
 	source->number_cookies = 0;
 	source->end_of_message = FALSE;
 
@@ -807,6 +828,9 @@ gst_curl_http_src_create_easy_handle(GstCurlHttpSrc *s)
 	for(i = 0; i < s->number_cookies; i++) {
 		gst_curl_setopt_str(handle, CURLOPT_COOKIELIST, s->cookies[i]);
 	}
+
+	gst_curl_setopt_str_default(handle, CURLOPT_USERAGENT, s->user_agent);
+
 	gst_curl_setopt_int(handle, CURLOPT_FOLLOWLOCATION, s->allow_3xx_redirect);
 	gst_curl_setopt_int_default(handle, CURLOPT_MAXREDIRS, s->max_3xx_redirects);
 	gst_curl_setopt_int(handle, CURLOPT_TCP_KEEPALIVE, s->keep_alive);

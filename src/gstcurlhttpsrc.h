@@ -221,6 +221,8 @@ enum
   PROP_MAX
 };
 
+static gchar*					gst_curl_http_src_default_useragent;
+
 /*
  * Function Definitions
  */
