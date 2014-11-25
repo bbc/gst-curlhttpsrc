@@ -591,7 +591,7 @@ gst_curl_http_src_curl_multi_loop(gpointer thread_data)
 {
 	CURLM *multi_handle;
 	CURLMsg *curl_message;
-	gboolean run, exit_cond, finished_processing;
+	gboolean run, exit_cond;
 	gint still_running, i, reason;
 	GstCurlHttpSrcQueueElement *queue_element;
 
@@ -686,9 +686,6 @@ gst_curl_http_src_curl_multi_loop(gpointer thread_data)
 		else if(curl_multi_loop_signal_state == GSTCURL_MULTI_LOOP_STATE_RUNNING)
 		{
 			g_mutex_unlock(curl_multi_loop_signal_mutex);
-			/*GSTCURL_DEBUG_PRINT("Performing curl operation...");*/
-			finished_processing = FALSE;
-			/*while(finished_processing != TRUE) {*/
 			/* We have queue item(s), so poke curl with the do summat stick */
 			struct timeval timeout;
 			gint rc;
@@ -776,10 +773,8 @@ gst_curl_http_src_curl_multi_loop(gpointer thread_data)
 				else {
 					curl_multi_loop_signal_state = GSTCURL_MULTI_LOOP_STATE_WAIT;
 				}
-				finished_processing = TRUE;
 				g_mutex_unlock(curl_multi_loop_signal_mutex);
 			}
-			/*}*/
 		}
 		else if (curl_multi_loop_signal_state == GSTCURL_MULTI_LOOP_STATE_STOP)
 		{
