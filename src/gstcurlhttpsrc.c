@@ -471,6 +471,159 @@ gst_curl_http_src_create (GstPushSrc * psrc, GstBuffer ** outbuf)
 }
 
 /*
+ * From the data in the queue element s, create a CURL easy handle and populate
+ * options with the URL, proxy data, login options, cookies,
+ */
+static CURL*
+gst_curl_http_src_create_easy_handle(GstCurlHttpSrc *s)
+{
+	CURL* handle;
+	gint i;
+	GSTCURL_FUNCTION_ENTRY(s);
+
+	handle = curl_easy_init();
+	if(handle == NULL) {
+		GST_ERROR_OBJECT(s, "Couldn't init a curl easy handle!");
+		return NULL;
+	}
+	GST_INFO_OBJECT(s, "Creating a new handle for URI %s", s->uri);
+
+	/* This is mandatory and yet not default option, so if this is NULL
+	 * then something very bad is going on. */
+	curl_easy_setopt(handle, CURLOPT_URL, s->uri);
+
+	gst_curl_setopt_str(handle, CURLOPT_PROXY, s->proxy_uri);
+	gst_curl_setopt_str(handle, CURLOPT_PROXYUSERNAME, s->proxy_user);
+	gst_curl_setopt_str(handle, CURLOPT_PROXYPASSWORD, s->proxy_pass);
+
+	for(i = 0; i < s->number_cookies; i++) {
+		gst_curl_setopt_str(handle, CURLOPT_COOKIELIST, s->cookies[i]);
+	}
+
+	gst_curl_setopt_str_default(handle, CURLOPT_USERAGENT, s->user_agent);
+
+	gst_curl_setopt_int(handle, CURLOPT_FOLLOWLOCATION, s->allow_3xx_redirect);
+	gst_curl_setopt_int_default(handle, CURLOPT_MAXREDIRS, s->max_3xx_redirects);
+	gst_curl_setopt_int(handle, CURLOPT_TCP_KEEPALIVE, s->keep_alive);
+
+	switch (s->preferred_http_version) {
+	case GSTCURL_HTTP_VERSION_1_0:
+		GST_DEBUG_OBJECT(s, "Setting version as HTTP/1.0");
+		gst_curl_setopt_int(handle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
+		break;
+	case GSTCURL_HTTP_VERSION_1_1:
+		GST_DEBUG_OBJECT(s, "Setting version as HTTP/1.1");
+		gst_curl_setopt_int(handle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+		break;
+	case GSTCURL_HTTP_VERSION_2_0:
+		GST_DEBUG_OBJECT(s, "Setting version as HTTP/2.0");
+		curl_easy_setopt(handle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_0);
+		break;
+	default:
+		GST_WARNING_OBJECT(s, "Supplied a bogus HTTP version, using curl default!");
+	}
+
+	curl_easy_setopt(handle, CURLOPT_HEADERFUNCTION, gst_curl_http_src_get_header);
+	curl_easy_setopt(handle, CURLOPT_HEADERDATA, s);
+	curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, gst_curl_http_src_get_chunks);
+	curl_easy_setopt(handle, CURLOPT_WRITEDATA, s);
+
+	GSTCURL_FUNCTION_EXIT(s);
+	return handle;
+}
+
+/*
+ * Add the GstCurlHttpSrc item to the queue and then wait until the curl thread
+ * signals us to say that our request has completed.
+ */
+static gboolean
+gst_curl_http_src_make_request(GstCurlHttpSrc *s)
+{
+	GstCurlHttpSrcQueueElement* element;
+	gboolean ret = FALSE;
+	GSTCURL_FUNCTION_ENTRY(s);
+
+	s->result = GSTCURL_RETURN_NONE;
+	if(s->curl_handle == NULL) {
+		return ret;
+	}
+	g_mutex_lock(s->mutex);
+	g_mutex_lock(request_queue_mutex);
+	if (request_queue == NULL) {
+		/* Queue is currently empty, so create a new item on the head */
+		request_queue = g_malloc(sizeof(GstCurlHttpSrcQueueElement));
+		if(request_queue == NULL) {
+			GST_ERROR_OBJECT(s, "Couldn't allocate space for request queue!");
+			return ret;
+		}
+		request_queue->p = s;
+		request_queue->running = g_malloc(sizeof(GMutex));
+		g_mutex_init(request_queue->running);
+		GSTCURL_ASSERT_MUTEX(request_queue->running);
+		request_queue->next = NULL;
+	}
+	else {
+		element = request_queue;
+		while(element->next != NULL) {
+			element = element->next;
+		}
+		element->next = g_malloc(sizeof(GstCurlHttpSrcQueueElement));
+		if(element->next == NULL) {
+			GST_ERROR_OBJECT(s, "Couldn't allocate space for new queue element!");
+			return ret;
+		}
+		element->next->p = s;
+		element->next->running = g_malloc(sizeof(GMutex));
+		g_mutex_init(element->next->running);
+		GSTCURL_ASSERT_MUTEX(element->next->running);
+		element->next->next = NULL;
+	}
+
+	GST_DEBUG_OBJECT(s, "Submitting request for URI %s to curl", s->uri);
+
+	/* Signal the worker thread */
+	g_mutex_lock(curl_multi_loop_signal_mutex);
+	curl_multi_loop_signal_state = GSTCURL_MULTI_LOOP_STATE_QUEUE_EVENT;
+	g_cond_signal(curl_multi_loop_signaller);
+	g_mutex_unlock(request_queue_mutex);
+	g_mutex_unlock(curl_multi_loop_signal_mutex);
+
+	g_cond_wait(s->finished, s->mutex);
+	g_mutex_unlock(s->mutex);
+
+	switch (s->result) {
+	case GSTCURL_RETURN_NONE:
+		GST_WARNING_OBJECT(s, "Nothing ever happened to our request for URI %s!",
+				s->uri);
+		break;
+	case GSTCURL_RETURN_DONE:
+		GST_DEBUG_OBJECT(s, "cURL call finished and returned for URI %s", s->uri);
+		s->end_of_message = TRUE;
+		ret = TRUE;
+		break;
+	case GSTCURL_RETURN_BAD_QUEUE_REQUEST:
+		GST_WARNING_OBJECT(s, "cURL call for URI %s returned as a bad queue",
+				s->uri);
+		break;
+	case GSTCURL_RETURN_TOTAL_ERROR:
+		GST_ERROR_OBJECT(s, "cURL call for URI %s returned as a total failure",
+				s->uri);
+		break;
+	case GSTCURL_RETURN_PIPELINE_NULL:
+		GST_INFO_OBJECT(s,
+			"Pipeline is cleaning up before request for URI %s could complete",
+				s->uri);
+		break;
+	default:
+		/* Why are we here? */
+		GST_WARNING_OBJECT(s, "Illegal curl worker thread result!");
+	}
+
+	GSTCURL_FUNCTION_EXIT(s);
+	return ret;
+}
+
+/*
  * "Negotiate" capabilities between us and the sink.
  * I.e. tell the sink device what data to expect. We can't be told what to send
  * unless we implement "only return to me if this type" property. Potential TODO
@@ -499,6 +652,16 @@ gst_curl_http_src_negotiate_caps (GstCurlHttpSrc *src)
 		GST_INFO_OBJECT (src, "No caps have been set, continue.");
 	}
 	return TRUE;
+}
+
+/*
+ * Cleanup the CURL easy handle once we're done with it.
+ */
+static inline void
+gst_curl_http_src_destroy_easy_handle(CURL* handle)
+{
+	/* Thank you Handles, and well done. Well done, mate. */
+	curl_easy_cleanup(handle);
 }
 
 static GstStateChangeReturn
@@ -873,170 +1036,6 @@ gst_curl_try_mutex(GMutex* gmutex) {
 		}
 	}
 	return ret;
-}
-
-/*
- * From the data in the queue element s, create a CURL easy handle and populate
- * options with the URL, proxy data, login options, cookies,
- */
-static CURL*
-gst_curl_http_src_create_easy_handle(GstCurlHttpSrc *s)
-{
-	CURL* handle;
-	gint i;
-	GSTCURL_FUNCTION_ENTRY(s);
-
-	handle = curl_easy_init();
-	if(handle == NULL) {
-		GST_ERROR_OBJECT(s, "Couldn't init a curl easy handle!");
-		return NULL;
-	}
-	GST_INFO_OBJECT(s, "Creating a new handle for URI %s", s->uri);
-
-	/* This is mandatory and yet not default option, so if this is NULL
-	 * then something very bad is going on. */
-	curl_easy_setopt(handle, CURLOPT_URL, s->uri);
-
-	gst_curl_setopt_str(handle, CURLOPT_PROXY, s->proxy_uri);
-	gst_curl_setopt_str(handle, CURLOPT_PROXYUSERNAME, s->proxy_user);
-	gst_curl_setopt_str(handle, CURLOPT_PROXYPASSWORD, s->proxy_pass);
-
-	for(i = 0; i < s->number_cookies; i++) {
-		gst_curl_setopt_str(handle, CURLOPT_COOKIELIST, s->cookies[i]);
-	}
-
-	gst_curl_setopt_str_default(handle, CURLOPT_USERAGENT, s->user_agent);
-
-	gst_curl_setopt_int(handle, CURLOPT_FOLLOWLOCATION, s->allow_3xx_redirect);
-	gst_curl_setopt_int_default(handle, CURLOPT_MAXREDIRS, s->max_3xx_redirects);
-	gst_curl_setopt_int(handle, CURLOPT_TCP_KEEPALIVE, s->keep_alive);
-
-	switch (s->preferred_http_version) {
-	case GSTCURL_HTTP_VERSION_1_0:
-		GST_DEBUG_OBJECT(s, "Setting version as HTTP/1.0");
-		gst_curl_setopt_int(handle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
-		break;
-	case GSTCURL_HTTP_VERSION_1_1:
-		GST_DEBUG_OBJECT(s, "Setting version as HTTP/1.1");
-		gst_curl_setopt_int(handle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-		break;
-	case GSTCURL_HTTP_VERSION_2_0:
-		GST_DEBUG_OBJECT(s, "Setting version as HTTP/2.0");
-		curl_easy_setopt(handle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_0);
-		break;
-	default:
-		/* TODO Print a dodgy or as yet unimplemented option! */
-		GST_WARNING_OBJECT(s, "Supplied a bogus HTTP version, using curl default!");
-	}
-
-	curl_easy_setopt(handle, CURLOPT_HEADERFUNCTION, gst_curl_http_src_get_header);
-	curl_easy_setopt(handle, CURLOPT_HEADERDATA, s);
-	curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, gst_curl_http_src_get_chunks);
-	curl_easy_setopt(handle, CURLOPT_WRITEDATA, s);
-
-	GSTCURL_FUNCTION_EXIT(s);
-	return handle;
-}
-
-/*
- * Add the GstCurlHttpSrc item to the queue and then wait until the curl thread
- * signals us to say that our request has completed.
- */
-static gboolean
-gst_curl_http_src_make_request(GstCurlHttpSrc *s)
-{
-	GstCurlHttpSrcQueueElement* element;
-	gboolean ret = FALSE;
-	GSTCURL_FUNCTION_ENTRY(s);
-
-	s->result = GSTCURL_RETURN_NONE;
-	if(s->curl_handle == NULL) {
-		return ret;
-	}
-	g_mutex_lock(s->mutex);
-	g_mutex_lock(request_queue_mutex);
-	if (request_queue == NULL) {
-		/* Queue is currently empty, so create a new item on the head */
-		request_queue = g_malloc(sizeof(GstCurlHttpSrcQueueElement));
-		if(request_queue == NULL) {
-			GST_ERROR_OBJECT(s, "Couldn't allocate space for request queue!");
-			return ret;
-		}
-		request_queue->p = s;
-		request_queue->running = g_malloc(sizeof(GMutex));
-		g_mutex_init(request_queue->running);
-		GSTCURL_ASSERT_MUTEX(request_queue->running);
-		request_queue->next = NULL;
-	}
-	else {
-		element = request_queue;
-		while(element->next != NULL) {
-			element = element->next;
-		}
-		element->next = g_malloc(sizeof(GstCurlHttpSrcQueueElement));
-		if(element->next == NULL) {
-			GST_ERROR_OBJECT(s, "Couldn't allocate space for new queue element!");
-			return ret;
-		}
-		element->next->p = s;
-		element->next->running = g_malloc(sizeof(GMutex));
-		g_mutex_init(element->next->running);
-		GSTCURL_ASSERT_MUTEX(element->next->running);
-		element->next->next = NULL;
-	}
-
-	GST_DEBUG_OBJECT(s, "Submitting request for URI %s to curl", s->uri);
-
-	/* Signal the worker thread */
-	g_mutex_lock(curl_multi_loop_signal_mutex);
-	curl_multi_loop_signal_state = GSTCURL_MULTI_LOOP_STATE_QUEUE_EVENT;
-	g_cond_signal(curl_multi_loop_signaller);
-	g_mutex_unlock(request_queue_mutex);
-	g_mutex_unlock(curl_multi_loop_signal_mutex);
-
-	g_cond_wait(s->finished, s->mutex);
-	g_mutex_unlock(s->mutex);
-
-	switch (s->result) {
-	case GSTCURL_RETURN_NONE:
-		GST_WARNING_OBJECT(s, "Nothing ever happened to our request for URI %s!",
-				s->uri);
-		break;
-	case GSTCURL_RETURN_DONE:
-		GST_DEBUG_OBJECT(s, "cURL call finished and returned for URI %s", s->uri);
-		s->end_of_message = TRUE;
-		ret = TRUE;
-		break;
-	case GSTCURL_RETURN_BAD_QUEUE_REQUEST:
-		GST_WARNING_OBJECT(s, "cURL call for URI %s returned as a bad queue",
-				s->uri);
-		break;
-	case GSTCURL_RETURN_TOTAL_ERROR:
-		GST_ERROR_OBJECT(s, "cURL call for URI %s returned as a total failure",
-				s->uri);
-		break;
-	case GSTCURL_RETURN_PIPELINE_NULL:
-		GST_INFO_OBJECT(s,
-			"Pipeline is cleaning up before request for URI %s could complete",
-				s->uri);
-		break;
-	default:
-		/* Why are we here? */
-		GST_WARNING_OBJECT(s, "Shouldn't have reached here?");
-	}
-
-	GSTCURL_FUNCTION_EXIT(s);
-	return ret;
-}
-
-/*
- * Destroy the easy handle created in the above function
- */
-static inline void
-gst_curl_http_src_destroy_easy_handle(CURL* handle)
-{
-	/* Thank you Handles, and well done. Well done, mate. */
-	curl_easy_cleanup(handle);
 }
 
 /*
