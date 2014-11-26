@@ -256,20 +256,15 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
 	gst_debug_log (gst_curl_loop_debug, GST_LEVEL_INFO, __FILE__, __func__,
 			__LINE__, NULL, "Testing the curl_multi_loop debugging prints");
 
+	/*
+	 * TODO: These all leak as I can never free() them as GStreamer doesn't
+	 * seem to actually include the ability to tell me that the pipeline is
+	 * being cleaned up outside the scope of my own element.
+	 */
 	g_mutex_init(&GstCurlHttpSrcLoopReadyMutex);
-	g_mutex_lock(&GstCurlHttpSrcLoopReadyMutex);
 	g_cond_init(&GstCurlHttpSrcLoopReadyCond);
 	g_rec_mutex_init(&GstCurlHttpSrcLoopRecMutex);
-	GstCurlHttpSrcLoopTask = gst_task_new(
-			(GstTaskFunction)gst_curl_http_src_curl_multi_loop, NULL, NULL);
-	gst_task_set_lock(GstCurlHttpSrcLoopTask, &GstCurlHttpSrcLoopRecMutex);
-	if(gst_task_start(GstCurlHttpSrcLoopTask) == FALSE) {
-		GSTCURL_ERROR_PRINT("Couldn't start Curl Multi Loop task!");
-	}
-	g_cond_wait(&GstCurlHttpSrcLoopReadyCond, &GstCurlHttpSrcLoopReadyMutex);
-	GSTCURL_INFO_PRINT("Curl Multi loop has been correctly initialised!");
-	g_mutex_unlock(&GstCurlHttpSrcLoopReadyMutex);
-
+	g_mutex_init(&GstCurlHttpSrcLoopRefcountMutex);
 
 	gst_element_class_set_details_simple(gstelement_class,
 			"HTTP Client Source using libcURL",
@@ -452,6 +447,30 @@ gst_curl_http_src_init (GstCurlHttpSrc * source)
 	g_mutex_init(source->mutex);
 	source->finished = g_malloc(sizeof(GCond));
 	g_cond_init(source->finished);
+
+	/*
+	 * Check that the CURL worker thread is running. If it isn't, start it.
+	 */
+	g_mutex_lock(&GstCurlHttpSrcLoopRefcountMutex);
+	if(GstCurlHttpSrcLoopRefcount == 0) {
+		g_mutex_lock(&GstCurlHttpSrcLoopReadyMutex);
+		GstCurlHttpSrcLoopTask = gst_task_new(
+				(GstTaskFunction)gst_curl_http_src_curl_multi_loop, NULL, NULL);
+		gst_task_set_lock(GstCurlHttpSrcLoopTask, &GstCurlHttpSrcLoopRecMutex);
+		if(gst_task_start(GstCurlHttpSrcLoopTask) == FALSE) {
+			/*
+			 * This is a pretty critical failure and is not recoverable, so
+			 * commit sudoku and run away.
+			 */
+			GSTCURL_ERROR_PRINT("Couldn't start Curl Multi Loop task!");
+			abort();
+		}
+		g_cond_wait(&GstCurlHttpSrcLoopReadyCond, &GstCurlHttpSrcLoopReadyMutex);
+		GSTCURL_INFO_PRINT("Curl Multi loop has been correctly initialised!");
+		g_mutex_unlock(&GstCurlHttpSrcLoopReadyMutex);
+	}
+	GstCurlHttpSrcLoopRefcount++;
+	g_mutex_unlock(&GstCurlHttpSrcLoopRefcountMutex);
 
 	GSTCURL_FUNCTION_EXIT(source);
 }
@@ -704,6 +723,23 @@ gst_curl_http_src_change_state (GstElement * element,
 	case GST_STATE_CHANGE_READY_TO_NULL:
 		/* The pipeline has ended, so signal any running request to end. */
 		gst_curl_http_src_request_remove(source);
+		/* Decrement the refcount on the multi task, if it's then 0 we need to
+		 * tell it to end as there's no-one else that needs it. */
+		g_mutex_lock(&GstCurlHttpSrcLoopRefcountMutex);
+		GstCurlHttpSrcLoopRefcount--;
+		GST_INFO_OBJECT(source, "Closing instance, worker thread refcount is %u",
+				GstCurlHttpSrcLoopRefcount);
+		if(GstCurlHttpSrcLoopRefcount == 0) {
+			g_mutex_lock(curl_multi_loop_signal_mutex);
+			/* Signal the GstTask to pause so it doesn't loop around before
+			 * we get a chance to gst_task_join() it. */
+			gst_task_pause(GstCurlHttpSrcLoopTask);
+			curl_multi_loop_signal_state = GSTCURL_MULTI_LOOP_STATE_STOP;
+			g_cond_signal(curl_multi_loop_signaller);
+			g_mutex_unlock(curl_multi_loop_signal_mutex);
+			gst_task_join(GstCurlHttpSrcLoopTask);
+		}
+		g_mutex_unlock(&GstCurlHttpSrcLoopRefcountMutex);
 		break;
 	default:
 		break;

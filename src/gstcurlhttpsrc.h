@@ -202,6 +202,9 @@ static enum {
 	GSTCURL_MULTI_LOOP_STATE_MAX
 } curl_multi_loop_signal_state;
 
+static GMutex		GstCurlHttpSrcLoopRefcountMutex;
+static guint		GstCurlHttpSrcLoopRefcount;
+
 static GstTask* 	GstCurlHttpSrcLoopTask;
 static GRecMutex	GstCurlHttpSrcLoopRecMutex;
 static GCond		GstCurlHttpSrcLoopReadyCond;
