@@ -1,0 +1,15 @@
+2014-10-31  Sam Hurst  <samuelh at rd.bbc.co.uk>
+
+    * AUTHORS:
+    Added authors file.
+    * ChangeLog:
+    Added element-specific ChangeLog file, moved gst-template version to
+    ChangeLog.template.
+
+    * src/gstcurlhttpsrc.c:
+    * src/gstcurlhttpsrc.h:
+    * src/curltask.c:
+    * src/curltask.h:
+    * src/gstcurldefaults.h:
+      Initial code checkin.
+
