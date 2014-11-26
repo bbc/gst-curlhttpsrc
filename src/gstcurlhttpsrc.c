@@ -1062,6 +1062,19 @@ gst_curl_http_src_curl_multi_loop(gpointer thread_data)
 	if(request_queue != NULL) {
 		gst_curl_http_src_recurse_queue_cleanup(request_queue, reason);
 	}
+
+	/*
+	 * No leaks here!
+	 */
+	g_mutex_clear(request_queue_mutex);
+	g_mutex_clear(curl_multi_loop_signal_mutex);
+	g_mutex_clear(request_removal_mutex);
+	g_cond_clear(curl_multi_loop_signaller);
+
+	g_free(request_queue_mutex);
+	g_free(curl_multi_loop_signal_mutex);
+	g_free(request_removal_mutex);
+	g_free(curl_multi_loop_signaller);
 }
 
 /*
