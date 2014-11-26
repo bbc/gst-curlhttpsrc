@@ -420,6 +420,7 @@ static void
 gst_curl_http_src_init (GstCurlHttpSrc * source)
 {
 	const gchar *proxy_uri = NULL;
+	const gchar *no_proxy_list = NULL;
 	GSTCURL_FUNCTION_ENTRY(source);
 
 	/* Assume everything is already free'd */
@@ -440,6 +441,11 @@ gst_curl_http_src_init (GstCurlHttpSrc * source)
 	if(proxy_uri != NULL) {
 		source->proxy_uri = g_malloc(strlen(proxy_uri) * (sizeof(gchar) + 1));
 		memcpy(source->proxy_uri, proxy_uri, strlen(proxy_uri));
+	}
+	no_proxy_list = g_getenv("no_proxy");
+	if(no_proxy_list != NULL) {
+		source->no_proxy_list = g_malloc(strlen(no_proxy_list) * (sizeof(gchar) + 1));
+		memcpy(source->no_proxy_list, no_proxy_list, strlen(no_proxy_list));
 	}
 
 	source->mutex = g_malloc(sizeof(GMutex));
@@ -514,6 +520,7 @@ gst_curl_http_src_create_easy_handle(GstCurlHttpSrc *s)
 	curl_easy_setopt(handle, CURLOPT_URL, s->uri);
 
 	gst_curl_setopt_str(handle, CURLOPT_PROXY, s->proxy_uri);
+	gst_curl_setopt_str(handle, CURLOPT_NOPROXY, s->no_proxy_list);
 	gst_curl_setopt_str(handle, CURLOPT_PROXYUSERNAME, s->proxy_user);
 	gst_curl_setopt_str(handle, CURLOPT_PROXYPASSWORD, s->proxy_pass);
 

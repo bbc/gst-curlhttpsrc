@@ -124,6 +124,7 @@ struct _GstCurlHttpSrc {
 	/* Type		Name					  Curl Option */
 	gchar*		uri;					/* CURLOPT_URL */
 	gchar*		proxy_uri;				/* CURLOPT_PROXY */
+	gchar*		no_proxy_list;			/* CURLOPT_NOPROXY */
 	gchar*		proxy_user;				/* CURLOPT_PROXYUSERNAME */
 	gchar*		proxy_pass;				/* CURLOPT_PROXYPASSWORD */
 
