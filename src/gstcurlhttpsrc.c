@@ -479,7 +479,6 @@ static GstFlowReturn
 gst_curl_http_src_create (GstPushSrc * psrc, GstBuffer ** outbuf)
 {
 	GstFlowReturn ret;
-	GstMapInfo info;
 	GstCurlHttpSrc *src = GST_CURLHTTPSRC(psrc);
 	GSTCURL_FUNCTION_ENTRY(src);
 	ret = GST_FLOW_OK;
@@ -497,11 +496,11 @@ gst_curl_http_src_create (GstPushSrc * psrc, GstBuffer ** outbuf)
 		return GST_FLOW_ERROR;
 	}
 
-	*outbuf = gst_buffer_new_allocate(NULL, src->len, NULL);
-	gst_buffer_map(*outbuf, &info, GST_MAP_READWRITE);
-	memcpy(info.data, src->msg, (size_t) src->len);
+	ret = gst_curl_http_src_handle_response(src, outbuf);
 
-	gst_curl_http_src_negotiate_caps(src);
+	if(ret == GST_FLOW_OK) {
+		gst_curl_http_src_negotiate_caps(src);
+	}
 
 	gst_curl_http_src_destroy_easy_handle(src->curl_handle);
 
@@ -664,6 +663,69 @@ gst_curl_http_src_make_request(GstCurlHttpSrc *s)
 	default:
 		/* Why are we here? */
 		GST_WARNING_OBJECT(s, "Illegal curl worker thread result!");
+	}
+
+	GSTCURL_FUNCTION_EXIT(s);
+	return ret;
+}
+
+/*
+ * Check return codes
+ */
+static GstFlowReturn
+gst_curl_http_src_handle_response(GstCurlHttpSrc *src, GstBuffer **buf)
+{
+	GstFlowReturn ret = GST_FLOW_OK;
+	GstMapInfo info;
+	glong http_response_code;
+	GSTCURL_FUNCTION_ENTRY(s);
+
+	/* Get back the return code for the session */
+	if(curl_easy_getinfo(src->curl_handle, CURLINFO_RESPONSE_CODE,
+			&http_response_code) != CURLE_OK) {
+		/* Curl cannot be relied on in this state, so return an error. */
+		return GST_FLOW_ERROR;
+	}
+
+	if(GSTCURL_INFO_RESPONSE(http_response_code) ||
+			GSTCURL_SUCCESS_RESPONSE(http_response_code)) {
+		/* Everything should be fine. */
+		GST_INFO_OBJECT(src, "Get for URI %s succeeded, response code %ld",
+						src->uri, http_response_code);
+	}
+	else if (GSTCURL_REDIRECT_RESPONSE(http_response_code)) {
+		/* Some redirection response. souphttpsrc reports errors here, so I'm
+		 * going to do the same. I shouldn't see these if curl allows
+		 * redirection (I think at least).
+		 */
+		GST_WARNING_OBJECT(src, "Get for URI %s received redirection code %ld",
+							src->uri, http_response_code);
+		ret = GST_FLOW_ERROR;
+	}
+	else if (GSTCURL_CLIENT_ERR_RESPONSE(http_response_code)) {
+		GST_ERROR_OBJECT(src, "Get for URI %s received client error code %ld",
+							src->uri, http_response_code);
+		ret = GST_FLOW_ERROR;
+	}
+	else if (GSTCURL_SERVER_ERR_RESPONSE(http_response_code)) {
+		GST_ERROR_OBJECT(src, "Get for URI %s received server error code %ld",
+							src->uri, http_response_code);
+		ret = GST_FLOW_ERROR;
+	}
+	else {
+		GST_FIXME_OBJECT(src, "Get for URI %s received unknown response code %ld",
+							src->uri, http_response_code);
+		ret = GST_FLOW_CUSTOM_ERROR;
+	}
+
+	/*
+	 * If the returned response has a body that we want to forward on, fill
+	 * in the buffer.
+	 */
+	if (ret == GST_FLOW_OK) {
+		*buf = gst_buffer_new_allocate(NULL, src->len, NULL);
+		gst_buffer_map(*buf, &info, GST_MAP_READWRITE);
+		memcpy(info.data, src->msg, (size_t) src->len);
 	}
 
 	GSTCURL_FUNCTION_EXIT(s);

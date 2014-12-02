@@ -94,6 +94,12 @@ G_BEGIN_DECLS
 #define GSTCURL_DEFAULT_CONNECTIONS_PROXY 30
 #define GSTCURL_DEFAULT_CONNECTIONS_GLOBAL 255
 
+#define GSTCURL_INFO_RESPONSE(x) ((x >= 100) && (x <= 199))
+#define GSTCURL_SUCCESS_RESPONSE(x) ((x >= 200) && (x <=299))
+#define GSTCURL_REDIRECT_RESPONSE(x) ((x >= 300) && (x <= 399))
+#define GSTCURL_CLIENT_ERR_RESPONSE(x) ((x >= 400) && (x <= 499))
+#define GSTCURL_SERVER_ERR_RESPONSE(x) ((x >= 500) && (x <= 599))
+
 #define GSTCURL_FUNCTIONTRACE 0
 
 #if GSTCURL_FUNCTIONTRACE
@@ -249,6 +255,8 @@ static void gst_curl_http_src_get_property (GObject * object, guint prop_id,
 static void gst_curl_http_src_init (GstCurlHttpSrc * source);
 static GstFlowReturn gst_curl_http_src_create (GstPushSrc * psrc,
 		GstBuffer ** outbuf);
+static GstFlowReturn
+gst_curl_http_src_handle_response(GstCurlHttpSrc *src, GstBuffer **buf);
 static gboolean gst_curl_http_src_negotiate_caps (GstCurlHttpSrc *src);
 static GstStateChangeReturn gst_curl_http_src_change_state (
 		GstElement * element, GstStateChange transition);
