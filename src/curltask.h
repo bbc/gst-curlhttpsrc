@@ -63,7 +63,7 @@ GST_DEBUG_CATEGORY_STATIC (gst_curl_loop_debug);
 	} \
 
 #define gst_curl_setopt_int(handle, type, option) \
-	if((option > GSTCURL_HANDLE_MIN_##type) && (option < GSTCURL_HANDLE_MAX_##type)) { \
+	if((option >= GSTCURL_HANDLE_MIN_##type) && (option <= GSTCURL_HANDLE_MAX_##type)) { \
 		curl_easy_setopt(handle,type,option); \
 	} \
 
@@ -76,7 +76,7 @@ GST_DEBUG_CATEGORY_STATIC (gst_curl_loop_debug);
 	} \
 
 #define gst_curl_setopt_int_default(handle,type,option) \
-	if((option < GSTCURL_HANDLE_MIN_##type) || (option > GSTCURL_HANDLE_MAX_##type)) { \
+	if((option <= GSTCURL_HANDLE_MIN_##type) || (option >= GSTCURL_HANDLE_MAX_##type)) { \
 		curl_easy_setopt(handle,type,GSTCURL_HANDLE_DEFAULT_##type); \
 	} \
 	else { \

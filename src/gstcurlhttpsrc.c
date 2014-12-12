@@ -427,6 +427,8 @@ gst_curl_http_src_init (GstCurlHttpSrc * source)
 	source->user_agent = NULL;
 	source->number_cookies = 0;
 	source->end_of_message = FALSE;
+	source->allow_3xx_redirect = GSTCURL_HANDLE_DEFAULT_CURLOPT_FOLLOWLOCATION;
+	source->max_3xx_redirects = GSTCURL_HANDLE_DEFAULT_CURLOPT_MAXREDIRS;
 
 	source->caps = gst_caps_new_empty();
 	gst_pad_use_fixed_caps(GST_BASE_SRC_PAD(source));

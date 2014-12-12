@@ -137,8 +137,8 @@ struct _GstCurlHttpSrc {
 	gchar**		cookies;				/* CURLOPT_COOKIELIST */
 	gint		number_cookies;
 	gchar*		user_agent;				/* CURLOPT_USERAGENT */
-	gboolean	allow_3xx_redirect;		/* CURLOPT_FOLLOWLOCATION */
-	gint		max_3xx_redirects;		/* CURLOPT_MAXREDIRS */
+	glong	allow_3xx_redirect;		/* CURLOPT_FOLLOWLOCATION */
+	glong		max_3xx_redirects;		/* CURLOPT_MAXREDIRS */
 	gboolean	keep_alive;				/* CURLOPT_TCP_KEEPALIVE */
 	/*TODO As the following are all multi options, move these to curl task */
 	guint		max_connection_time;	/* */
