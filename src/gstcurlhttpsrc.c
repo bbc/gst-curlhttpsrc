@@ -131,24 +131,9 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
     pref_http_ver = 1.1;
   }
 
-  /*
-   * Set the default user-agent string.
-   *
-   * This takes the form:
-   *              GStreamer curlhttpsrc libcurl/<curlver>
-   *
-   * e.g.:
-   *              GStreamer curlhttpsrc libcurl/7.39.0
-   *              ^-------Total chars=29-------^
-   */
-  gst_curl_http_src_default_useragent = g_malloc (sizeof (gchar) *
-      (30 + strlen (gst_curl_http_src_curl_capabilities->version)));
-  snprintf (gst_curl_http_src_default_useragent,
-      (29 + strlen (gst_curl_http_src_curl_capabilities->version)),
-      "GStreamer curlhttpsrc libcurl/%s",
-      gst_curl_http_src_curl_capabilities->version);
-  GST_DEBUG_OBJECT (klass, "Setting default User-Agent string as \"%s\"",
-      gst_curl_http_src_default_useragent);
+  gst_curl_http_src_default_useragent =
+      g_strdup_printf("GStreamer curlhttpsrc libcurl/%s",
+                      gst_curl_http_src_curl_capabilities->version);
 
   gobject_class->set_property = gst_curl_http_src_set_property;
   gobject_class->get_property = gst_curl_http_src_get_property;
@@ -411,8 +396,6 @@ gst_curl_http_src_get_property (GObject * object, guint prop_id,
 static void
 gst_curl_http_src_init (GstCurlHttpSrc * source)
 {
-  const gchar *proxy_uri = NULL;
-  const gchar *no_proxy_list = NULL;
   GSTCURL_FUNCTION_ENTRY (source);
 
   /* Assume everything is already free'd */
@@ -431,17 +414,8 @@ gst_curl_http_src_init (GstCurlHttpSrc * source)
   gst_pad_use_fixed_caps (GST_BASE_SRC_PAD (source));
   gst_base_src_set_automatic_eos (GST_BASE_SRC (source), FALSE);
 
-  proxy_uri = g_getenv ("http_proxy");
-  if (proxy_uri != NULL) {
-    source->proxy_uri = g_malloc (strlen (proxy_uri) * (sizeof (gchar) + 1));
-    memcpy (source->proxy_uri, proxy_uri, strlen (proxy_uri));
-  }
-  no_proxy_list = g_getenv ("no_proxy");
-  if (no_proxy_list != NULL) {
-    source->no_proxy_list =
-        g_malloc (strlen (no_proxy_list) * (sizeof (gchar) + 1));
-    memcpy (source->no_proxy_list, no_proxy_list, strlen (no_proxy_list));
-  }
+  source->proxy_uri = g_strdup (g_getenv ("http_proxy"));
+  source->no_proxy_list = g_strdup (g_getenv ("no_proxy"));
 
   source->mutex = g_malloc (sizeof (GMutex));
   g_mutex_init (source->mutex);
