@@ -51,11 +51,11 @@
 
 GST_DEBUG_CATEGORY_STATIC (gst_curl_loop_debug);
 
-#define GSTCURL_ERROR_PRINT(...) gst_debug_log (gst_curl_loop_debug, GST_LEVEL_ERROR, __FILE__, __func__, __LINE__, NULL, __VA_ARGS__)
-#define GSTCURL_WARNING_PRINT(...) gst_debug_log (gst_curl_loop_debug, GST_LEVEL_WARNING, __FILE__, __func__, __LINE__, NULL, __VA_ARGS__)
-#define GSTCURL_INFO_PRINT(...) gst_debug_log (gst_curl_loop_debug, GST_LEVEL_INFO, __FILE__, __func__, __LINE__, NULL, __VA_ARGS__)
-#define GSTCURL_DEBUG_PRINT(...) gst_debug_log (gst_curl_loop_debug, GST_LEVEL_DEBUG, __FILE__, __func__, __LINE__, NULL, __VA_ARGS__)
-#define GSTCURL_TRACE_PRINT(...) gst_debug_log (gst_curl_loop_debug, GST_LEVEL_TRACE, __FILE__, __func__, __LINE__, NULL, __VA_ARGS__)
+#define GSTCURL_ERROR_PRINT(...) GST_CAT_ERROR (gst_curl_loop_debug, __VA_ARGS__)
+#define GSTCURL_WARNING_PRINT(...) GST_CAT_WARNING (gst_curl_loop_debug, __VA_ARGS__)
+#define GSTCURL_INFO_PRINT(...) GST_CAT_INFO (gst_curl_loop_debug, __VA_ARGS__)
+#define GSTCURL_DEBUG_PRINT(...) GST_CAT_DEBUG (gst_curl_loop_debug, __VA_ARGS__)
+#define GSTCURL_TRACE_PRINT(...) GST_CAT_TRACE (gst_curl_loop_debug, __VA_ARGS__)
 
 #define gst_curl_setopt_str(handle,type,option) \
   if(option != NULL) { \
