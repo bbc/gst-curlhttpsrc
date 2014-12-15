@@ -423,6 +423,8 @@ gst_curl_http_src_init (GstCurlHttpSrc * source)
   g_mutex_init (source->mutex);
   source->finished = g_malloc (sizeof (GCond));
   g_cond_init (source->finished);
+  source->uri_mutex = g_malloc (sizeof (GMutex));
+  g_mutex_init (source->uri_mutex);
 
   /*
    * Check that the CURL worker thread is running. If it isn't, start it.
@@ -820,11 +822,19 @@ gst_curl_http_src_urihandler_get_protocols (GType type)
 static gchar *
 gst_curl_http_src_urihandler_get_uri (GstURIHandler * handler)
 {
-  GstCurlHttpSrc *source = GST_CURLHTTPSRC (handler);
+  gchar* ret;
+  GstCurlHttpSrc *source;
   GSTCURL_FUNCTION_ENTRY (source);
 
-  /* FIXME: make thread-safe */
-  return g_strdup (source->uri);
+  g_return_val_if_fail (GST_IS_URI_HANDLER (handler), FALSE);
+  source = GST_CURLHTTPSRC (handler);
+
+  g_mutex_lock(source->uri_mutex);
+  ret = g_strdup (source->uri);
+  g_mutex_unlock(source->uri_mutex);
+
+  GSTCURL_FUNCTION_EXIT (source);
+  return ret;
 }
 
 static gboolean
@@ -833,6 +843,11 @@ gst_curl_http_src_urihandler_set_uri (GstURIHandler * handler,
 {
   GstCurlHttpSrc *source = GST_CURLHTTPSRC (handler);
   GSTCURL_FUNCTION_ENTRY (source);
+
+  g_return_val_if_fail (GST_IS_URI_HANDLER (handler), FALSE);
+  g_return_val_if_fail (uri != NULL, FALSE);
+
+  g_mutex_lock(source->uri_mutex);
 
   if (source->uri != NULL) {
     GST_DEBUG_OBJECT (source,
@@ -845,6 +860,8 @@ gst_curl_http_src_urihandler_set_uri (GstURIHandler * handler,
   if (source->uri == NULL) {
     return FALSE;
   }
+
+  g_mutex_unlock(source->uri_mutex);
 
   GSTCURL_FUNCTION_EXIT (source);
   return TRUE;

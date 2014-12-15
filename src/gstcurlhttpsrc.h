@@ -118,6 +118,8 @@ struct _GstCurlHttpSrcClass
 struct _GstCurlHttpSrc
 {
   GstPushSrc element;
+
+  GMutex *uri_mutex; /* Make the URIHandler get/set thread safe */
   /*
    * Things to tell libcURL about to build up the request message.
    */
