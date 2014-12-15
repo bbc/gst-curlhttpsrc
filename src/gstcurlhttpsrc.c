@@ -128,7 +128,7 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
         pref_http_ver);
   }
   else {
-    pref_http_ver = 1.1;
+    pref_http_ver = GSTCURL_HANDLE_DEFAULT_CURLOPT_HTTP_VERSION;
   }
 
   gst_curl_http_src_default_useragent =
@@ -226,7 +226,7 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
   }
   else {
     if (pref_http_ver > 1.1) {
-      pref_http_ver = 1.1;
+      pref_http_ver = GSTCURL_HANDLE_DEFAULT_CURLOPT_HTTP_VERSION;
     }
     g_object_class_install_property (gobject_class, PROP_HTTPVERSION,
         g_param_spec_float ("http-version", "HTTP-Version",
@@ -404,11 +404,13 @@ gst_curl_http_src_init (GstCurlHttpSrc * source)
   source->proxy_user = NULL;
   source->proxy_pass = NULL;
   source->cookies = NULL;
-  source->user_agent = NULL;
+  source->user_agent = GSTCURL_HANDLE_DEFAULT_CURLOPT_USERAGENT;
   source->number_cookies = 0;
   source->end_of_message = FALSE;
   source->allow_3xx_redirect = GSTCURL_HANDLE_DEFAULT_CURLOPT_FOLLOWLOCATION;
   source->max_3xx_redirects = GSTCURL_HANDLE_DEFAULT_CURLOPT_MAXREDIRS;
+  source->keep_alive = GSTCURL_HANDLE_DEFAULT_CURLOPT_TCP_KEEPALIVE;
+  source->preferred_http_version = pref_http_ver;
 
   source->caps = gst_caps_new_empty ();
   gst_pad_use_fixed_caps (GST_BASE_SRC_PAD (source));
