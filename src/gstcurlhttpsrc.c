@@ -677,8 +677,13 @@ gst_curl_http_src_handle_response (GstCurlHttpSrc * src, GstBuffer ** buf)
   }
   else if (GSTCURL_REDIRECT_RESPONSE (http_response_code)) {
     /* Some redirection response. souphttpsrc reports errors here, so I'm
-     * going to do the same. I shouldn't see these if curl allows
-     * redirection (I think at least).
+     * going to do the same. I should only see these if:
+     *  > Curl has been configured not to follow redirects
+     *  > Curl has been configured to follow redirects up to a given limit and
+     *    that limit has been exceeded. (By default it's unlimited)
+     *
+     * Either way there won't be the response that was requested so signal a
+     * flow error.
      */
     GST_WARNING_OBJECT (src, "Get for URI %s received redirection code %ld",
         src->uri, http_response_code);
