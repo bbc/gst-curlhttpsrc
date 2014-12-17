@@ -94,6 +94,53 @@ static GstStaticPadTemplate srcpadtemplate = GST_STATIC_PAD_TEMPLATE ("src",
     GST_PAD_ALWAYS,
     GST_STATIC_CAPS_ANY);
 
+/*
+ * Function Definitions
+ */
+/* Gstreamer generic element functions */
+static void gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass);
+static void gst_curl_http_src_set_property (GObject * object, guint prop_id,
+    const GValue * value, GParamSpec * pspec);
+static void gst_curl_http_src_get_property (GObject * object, guint prop_id,
+    GValue * value, GParamSpec * pspec);
+static void gst_curl_http_src_init (GstCurlHttpSrc * source);
+static GstFlowReturn gst_curl_http_src_create (GstPushSrc * psrc,
+    GstBuffer ** outbuf);
+static GstFlowReturn
+gst_curl_http_src_handle_response (GstCurlHttpSrc * src, GstBuffer ** buf);
+static gboolean gst_curl_http_src_negotiate_caps (GstCurlHttpSrc * src);
+static GstStateChangeReturn gst_curl_http_src_change_state (GstElement *
+    element, GstStateChange transition);
+static void gst_curl_http_src_cleanup_instance(GstCurlHttpSrc *src);
+
+/* URI Handler functions */
+static void gst_curl_http_src_uri_handler_init (gpointer g_iface,
+    gpointer iface_data);
+static guint gst_curl_http_src_urihandler_get_type (GType type);
+static const gchar *const *gst_curl_http_src_urihandler_get_protocols (GType
+    type);
+static gchar *gst_curl_http_src_urihandler_get_uri (GstURIHandler * handler);
+static gboolean gst_curl_http_src_urihandler_set_uri (GstURIHandler * handler,
+    const gchar * uri, GError ** error);
+
+/* GstTask functions */
+static void gst_curl_http_src_curl_multi_loop (gpointer thread_data);
+static CURL *gst_curl_http_src_create_easy_handle (GstCurlHttpSrc * s);
+static gboolean gst_curl_http_src_make_request (GstCurlHttpSrc * s);
+static inline void gst_curl_http_src_destroy_easy_handle (CURL * handle);
+static size_t gst_curl_http_src_get_header (void *header, size_t size,
+    size_t nmemb, GstCurlHttpSrc * s);
+static size_t gst_curl_http_src_get_chunks (void *chunk, size_t size,
+    size_t nmemb, GstCurlHttpSrc * s);
+static gboolean gst_curl_http_src_signal_finished (CURL * handle, gint reason);
+static void inline
+gst_curl_http_src_recurse_queue_cleanup (GstCurlHttpSrcQueueElement * element,
+    gint reason);
+static void gst_curl_http_src_request_remove (GstCurlHttpSrc * src);
+
+static char *gst_curl_http_src_strcasestr (const char *haystack,
+    const char *needle);
+
 #define gst_curl_http_src_parent_class parent_class
 G_DEFINE_TYPE_WITH_CODE (GstCurlHttpSrc, gst_curl_http_src, GST_TYPE_PUSH_SRC,
     G_IMPLEMENT_INTERFACE (GST_TYPE_URI_HANDLER,

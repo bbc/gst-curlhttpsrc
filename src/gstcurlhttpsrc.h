@@ -195,12 +195,12 @@ struct _GstCurlHttpSrcQueueElement
   GMutex *running;
 };
 
-static GstCurlHttpSrcQueueElement *request_queue;
-static GMutex *request_queue_mutex;
+GstCurlHttpSrcQueueElement *request_queue;
+GMutex *request_queue_mutex;
 
-static GCond *curl_multi_loop_signaller;
-static GMutex *curl_multi_loop_signal_mutex;
-static enum
+GCond *curl_multi_loop_signaller;
+GMutex *curl_multi_loop_signal_mutex;
+enum
 {
   GSTCURL_MULTI_LOOP_STATE_WAIT = 0,
   GSTCURL_MULTI_LOOP_STATE_QUEUE_EVENT,
@@ -210,16 +210,16 @@ static enum
   GSTCURL_MULTI_LOOP_STATE_MAX
 } curl_multi_loop_signal_state;
 
-static GMutex GstCurlHttpSrcLoopRefcountMutex;
-static guint GstCurlHttpSrcLoopRefcount;
+GMutex GstCurlHttpSrcLoopRefcountMutex;
+guint GstCurlHttpSrcLoopRefcount;
 
-static GstTask *GstCurlHttpSrcLoopTask;
-static GRecMutex GstCurlHttpSrcLoopRecMutex;
-static GCond GstCurlHttpSrcLoopReadyCond;
-static GMutex GstCurlHttpSrcLoopReadyMutex;
+GstTask *GstCurlHttpSrcLoopTask;
+GRecMutex GstCurlHttpSrcLoopRecMutex;
+GCond GstCurlHttpSrcLoopReadyCond;
+GMutex GstCurlHttpSrcLoopReadyMutex;
 
-static GMutex *request_removal_mutex;
-static GstCurlHttpSrc *request_removal_element;
+GMutex *request_removal_mutex;
+GstCurlHttpSrc *request_removal_element;
 
 enum
 {
@@ -241,56 +241,9 @@ enum
   PROP_MAX
 };
 
-static curl_version_info_data *gst_curl_http_src_curl_capabilities;
-static gfloat pref_http_ver;
-static gchar *gst_curl_http_src_default_useragent;
-
-/*
- * Function Definitions
- */
-/* Gstreamer generic element functions */
-static void gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass);
-static void gst_curl_http_src_set_property (GObject * object, guint prop_id,
-    const GValue * value, GParamSpec * pspec);
-static void gst_curl_http_src_get_property (GObject * object, guint prop_id,
-    GValue * value, GParamSpec * pspec);
-static void gst_curl_http_src_init (GstCurlHttpSrc * source);
-static GstFlowReturn gst_curl_http_src_create (GstPushSrc * psrc,
-    GstBuffer ** outbuf);
-static GstFlowReturn
-gst_curl_http_src_handle_response (GstCurlHttpSrc * src, GstBuffer ** buf);
-static gboolean gst_curl_http_src_negotiate_caps (GstCurlHttpSrc * src);
-static GstStateChangeReturn gst_curl_http_src_change_state (GstElement *
-    element, GstStateChange transition);
-static void gst_curl_http_src_cleanup_instance(GstCurlHttpSrc *src);
-
-/* URI Handler functions */
-static void gst_curl_http_src_uri_handler_init (gpointer g_iface,
-    gpointer iface_data);
-static guint gst_curl_http_src_urihandler_get_type (GType type);
-static const gchar *const *gst_curl_http_src_urihandler_get_protocols (GType
-    type);
-static gchar *gst_curl_http_src_urihandler_get_uri (GstURIHandler * handler);
-static gboolean gst_curl_http_src_urihandler_set_uri (GstURIHandler * handler,
-    const gchar * uri, GError ** error);
-
-/* GstTask functions */
-static void gst_curl_http_src_curl_multi_loop (gpointer thread_data);
-static CURL *gst_curl_http_src_create_easy_handle (GstCurlHttpSrc * s);
-static gboolean gst_curl_http_src_make_request (GstCurlHttpSrc * s);
-static inline void gst_curl_http_src_destroy_easy_handle (CURL * handle);
-static size_t gst_curl_http_src_get_header (void *header, size_t size,
-    size_t nmemb, GstCurlHttpSrc * s);
-static size_t gst_curl_http_src_get_chunks (void *chunk, size_t size,
-    size_t nmemb, GstCurlHttpSrc * s);
-static gboolean gst_curl_http_src_signal_finished (CURL * handle, gint reason);
-static void inline
-gst_curl_http_src_recurse_queue_cleanup (GstCurlHttpSrcQueueElement * element,
-    gint reason);
-static void gst_curl_http_src_request_remove (GstCurlHttpSrc * src);
-
-static char *gst_curl_http_src_strcasestr (const char *haystack,
-    const char *needle);
+curl_version_info_data *gst_curl_http_src_curl_capabilities;
+gfloat pref_http_ver;
+gchar *gst_curl_http_src_default_useragent;
 
 G_END_DECLS
 #endif /* GSTCURLHTTPSRC_H_ */
