@@ -1010,8 +1010,7 @@ gst_curl_http_src_curl_multi_loop (gpointer thread_data)
        * once and should fail immediately prior.
        */
       while (queue_element != NULL) {
-        /*if(g_mutex_trylock(queue_element->running) == TRUE) { */
-        if (gst_curl_try_mutex (queue_element->running) == TRUE) {
+        if(g_mutex_trylock(queue_element->running) == TRUE) {
           GSTCURL_DEBUG_PRINT ("Adding easy handle for URI %s",
                                queue_element->p->uri);
           curl_multi_add_handle (multi_handle, queue_element->p->curl_handle);
@@ -1188,46 +1187,6 @@ gst_curl_http_src_curl_multi_loop (gpointer thread_data)
   g_free (curl_multi_loop_signal_mutex);
   g_free (request_removal_mutex);
   g_free (curl_multi_loop_signaller);
-}
-
-/*
- * Use our own function for mutex locking because the glib implementation has
- * no concept of failing gracefully and a SIGABRT really ruins your day.
- */
-static gboolean
-gst_curl_try_mutex (GMutex * gmutex)
-{
-  pthread_mutex_t *pmutex;
-  int pthread_ret;
-  gboolean ret = FALSE;
-
-  pmutex = g_atomic_pointer_get (&gmutex->p);
-  if (pmutex == NULL) {
-    GSTCURL_ERROR_PRINT ("Couldn't get posix mutex handle!");
-  }
-  else {
-    pthread_ret = pthread_mutex_trylock (pmutex);
-    switch (pthread_ret) {
-      case 0:
-        GSTCURL_DEBUG_PRINT ("pthread mutex has been locked!");
-        ret = TRUE;
-        break;
-      case EINVAL:
-        GSTCURL_ERROR_PRINT ("pthread mutex couldn't be locked, err EINVAL");
-        break;
-      case EBUSY:
-        GSTCURL_DEBUG_PRINT ("pthread mutex is already locked");
-        break;
-      case EAGAIN:
-        GSTCURL_ERROR_PRINT
-            ("pthread mutex couldn't be locked, exceed max recursive locks");
-        break;
-      default:
-        GSTCURL_WARNING_PRINT ("Unexpected posix return!");
-        break;
-    }
-  }
-  return ret;
 }
 
 /*

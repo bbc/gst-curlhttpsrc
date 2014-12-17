@@ -289,7 +289,6 @@ gst_curl_http_src_recurse_queue_cleanup (GstCurlHttpSrcQueueElement * element,
     gint reason);
 static void gst_curl_http_src_request_remove (GstCurlHttpSrc * src);
 
-static gboolean gst_curl_try_mutex (GMutex * gmutex);
 static char *gst_curl_http_src_strcasestr (const char *haystack,
     const char *needle);
 
