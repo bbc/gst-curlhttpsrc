@@ -752,7 +752,11 @@ static inline void
 gst_curl_http_src_destroy_easy_handle (CURL * handle)
 {
   /* Thank you Handles, and well done. Well done, mate. */
-  curl_easy_cleanup (handle);
+  if(handle != NULL) {
+    curl_easy_cleanup (handle);
+  }
+
+  handle = NULL;
 }
 
 static GstStateChangeReturn
@@ -783,6 +787,7 @@ gst_curl_http_src_change_state (GstElement * element, GstStateChange transition)
         gst_task_join (GstCurlHttpSrcLoopTask);
       }
       g_mutex_unlock (&GstCurlHttpSrcLoopRefcountMutex);
+      gst_curl_http_src_cleanup_instance(source);
       break;
     default:
       break;
@@ -792,6 +797,54 @@ gst_curl_http_src_change_state (GstElement * element, GstStateChange transition)
 
   GSTCURL_FUNCTION_EXIT (source);
   return ret;
+}
+
+/*
+ * Take care of any memory that may be left over from the instance that's now
+ * closing before we leak it.
+ */
+static void
+gst_curl_http_src_cleanup_instance(GstCurlHttpSrc *src)
+{
+  gint i;
+  g_mutex_lock(src->uri_mutex);
+  g_free(src->uri);
+  src->uri = NULL;
+  g_mutex_unlock(src->uri_mutex);
+  g_mutex_clear(src->uri_mutex);
+  g_free(src->uri_mutex);
+  src->uri_mutex = NULL;
+
+  g_free(src->proxy_uri);
+  src->proxy_uri = NULL;
+  g_free(src->no_proxy_list);
+  src->no_proxy_list = NULL;
+  g_free(src->proxy_user);
+  src->proxy_user = NULL;
+  g_free(src->proxy_pass);
+  src->proxy_pass = NULL;
+
+  for(i = 0; i < src->number_cookies; i++)
+  {
+    g_free(src->cookies[i]);
+    src->cookies[i] = NULL;
+  }
+  g_free(src->cookies);
+  src->cookies = NULL;
+
+  g_mutex_clear(src->mutex);
+  g_free(src->mutex);
+  src->mutex = NULL;
+  g_cond_clear(src->finished);
+  g_free(src->finished);
+  src->finished = NULL;
+
+  gst_curl_http_src_destroy_easy_handle(src->curl_handle);
+
+  g_free(src->msg);
+  src->msg = NULL;
+  g_free(src->headers.content_type);
+  src->headers.content_type = NULL;
 }
 
 static void

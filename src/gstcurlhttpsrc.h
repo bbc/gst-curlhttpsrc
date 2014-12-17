@@ -261,6 +261,7 @@ gst_curl_http_src_handle_response (GstCurlHttpSrc * src, GstBuffer ** buf);
 static gboolean gst_curl_http_src_negotiate_caps (GstCurlHttpSrc * src);
 static GstStateChangeReturn gst_curl_http_src_change_state (GstElement *
     element, GstStateChange transition);
+static void gst_curl_http_src_cleanup_instance(GstCurlHttpSrc *src);
 
 /* URI Handler functions */
 static void gst_curl_http_src_uri_handler_init (gpointer g_iface,
