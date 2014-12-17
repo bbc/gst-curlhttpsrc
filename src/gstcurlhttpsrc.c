@@ -412,8 +412,7 @@ gst_curl_http_src_init (GstCurlHttpSrc * source)
   source->keep_alive = GSTCURL_HANDLE_DEFAULT_CURLOPT_TCP_KEEPALIVE;
   source->preferred_http_version = pref_http_ver;
 
-  source->caps = gst_caps_new_empty ();
-  gst_pad_use_fixed_caps (GST_BASE_SRC_PAD (source));
+  gst_caps_replace(&source->caps, NULL);
   gst_base_src_set_automatic_eos (GST_BASE_SRC (source), FALSE);
 
   source->proxy_uri = g_strdup (g_getenv ("http_proxy"));
@@ -728,20 +727,16 @@ static gboolean
 gst_curl_http_src_negotiate_caps (GstCurlHttpSrc * src)
 {
   if (src->headers.content_type != NULL) {
-    if (src->caps != NULL) {
+    if (src->caps) {
       GST_INFO_OBJECT (src, "Setting cap on Content-Type of %s",
                        src->headers.content_type);
       src->caps = gst_caps_make_writable (src->caps);
       gst_caps_set_simple (src->caps, "content-type", G_TYPE_STRING,
                            src->headers.content_type, NULL);
-      if (!(GST_BASE_SRC (src), src->caps)) {
+      if (gst_base_src_set_caps(GST_BASE_SRC (src), src->caps) != TRUE) {
         GST_ERROR_OBJECT (src, "Setting caps failed!");
         return FALSE;
       }
-    }
-    else {
-      GST_WARNING_OBJECT (src, "source->caps is not initialised!");
-      return FALSE;
     }
   }
   else {
