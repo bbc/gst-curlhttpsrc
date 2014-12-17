@@ -59,6 +59,23 @@ PKG_CHECK_MODULES(GST, [
   ])
 ])
 
+dnl Check for libcurl-dev
+dnl 
+dnl As a lot of the SSL/HTTP2 stuff is determined as available at run time,
+dnl I'm not going to bother with it here. Just need to test for curl existing,
+dnl everything else is going to get sorted out by the curl library itself.
+dnl
+dnl Ideally, we'd love to be able to compile-time check for HTTP/2 support,
+dnl but libcurl's m4 file doesn't yet have that as a template.
+LIBCURL_CHECK_CONFIG([], [], [],
+  [AC_MSG_ERROR([
+    You need to install a developer library of libcurl on your system.
+    This is usually a case of installing your libcurl-dev package.
+    Alternatively, you may compile curl from scratch and link against
+    the generated libraries instead.
+  ])
+])
+
 dnl check if compiler understands -Wall (if yes, add -Wall to GST_CFLAGS)
 AC_MSG_CHECKING([to see if compiler understands -Wall])
 save_CFLAGS="$CFLAGS"
