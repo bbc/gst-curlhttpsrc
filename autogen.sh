@@ -8,10 +8,14 @@ autoreconf --verbose --force --install --make || {
  exit 1;
 }
 
-./configure || {
- echo 'configure failed';
- exit 1;
-}
+if test -n "$NOCONFIGURE"; then
+ echo 'Not running configure due to NOCONFIGURE env var.'
+else
+ ./configure || {
+  echo 'configure failed';
+  exit 1;
+ }
+fi
 
 echo
 echo "Now type 'make' to compile this module."
