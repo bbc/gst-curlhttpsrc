@@ -419,11 +419,11 @@ gst_curl_http_src_init (GstCurlHttpSrc * source)
   source->proxy_uri = g_strdup (g_getenv ("http_proxy"));
   source->no_proxy_list = g_strdup (g_getenv ("no_proxy"));
 
-  source->mutex = g_malloc (sizeof (GMutex));
+  source->mutex = g_new (GMutex, 1);
   g_mutex_init (source->mutex);
-  source->finished = g_malloc (sizeof (GCond));
+  source->finished = g_new (GCond, 1);
   g_cond_init (source->finished);
-  source->uri_mutex = g_malloc (sizeof (GMutex));
+  source->uri_mutex = g_new (GMutex, 1);;
   g_mutex_init (source->uri_mutex);
 
   /*
@@ -578,13 +578,13 @@ gst_curl_http_src_make_request (GstCurlHttpSrc * s)
   g_mutex_lock (request_queue_mutex);
   if (request_queue == NULL) {
     /* Queue is currently empty, so create a new item on the head */
-    request_queue = g_malloc (sizeof (GstCurlHttpSrcQueueElement));
+    request_queue = g_new0 (GstCurlHttpSrcQueueElement, 1);
     if (request_queue == NULL) {
       GST_ERROR_OBJECT (s, "Couldn't allocate space for request queue!");
       return ret;
     }
     request_queue->p = s;
-    request_queue->running = g_malloc (sizeof (GMutex));
+    request_queue->running = g_new (GMutex, 1);
     g_mutex_init (request_queue->running);
     GSTCURL_ASSERT_MUTEX (request_queue->running);
     request_queue->next = NULL;
@@ -594,13 +594,13 @@ gst_curl_http_src_make_request (GstCurlHttpSrc * s)
     while (element->next != NULL) {
       element = element->next;
     }
-    element->next = g_malloc (sizeof (GstCurlHttpSrcQueueElement));
+    element->next = g_new (GstCurlHttpSrcQueueElement, 1);
     if (element->next == NULL) {
       GST_ERROR_OBJECT (s, "Couldn't allocate space for new queue element!");
       return ret;
     }
     element->next->p = s;
-    element->next->running = g_malloc (sizeof (GMutex));
+    element->next->running = g_new (GMutex, 1);
     g_mutex_init (element->next->running);
     GSTCURL_ASSERT_MUTEX (element->next->running);
     element->next->next = NULL;
@@ -947,7 +947,7 @@ gst_curl_http_src_curl_multi_loop (gpointer thread_data)
   curl_multi_setopt (multi_handle, CURLMOPT_PIPELINING, 1);
   curl_multi_setopt (multi_handle, CURLMOPT_MAX_HOST_CONNECTIONS, 1);
 
-  request_queue_mutex = g_malloc (sizeof (GMutex));
+  request_queue_mutex = g_new (GMutex, 1);
   if (request_queue_mutex == NULL) {
     GSTCURL_ERROR_PRINT ("Couldn't malloc request_queue_mutex!");
     return;
@@ -955,13 +955,13 @@ gst_curl_http_src_curl_multi_loop (gpointer thread_data)
   g_mutex_init (request_queue_mutex);
   request_queue = NULL;
 
-  curl_multi_loop_signal_mutex = g_malloc (sizeof (GMutex));
+  curl_multi_loop_signal_mutex = g_new (GMutex, 1);
   if (curl_multi_loop_signal_mutex == NULL) {
     GSTCURL_ERROR_PRINT ("Couldn't malloc curl_multi_loop_signal_mutex!");
     return;
   }
   g_mutex_init (curl_multi_loop_signal_mutex);
-  curl_multi_loop_signaller = g_malloc (sizeof (GCond));
+  curl_multi_loop_signaller = g_new (GCond, 1);
   if (curl_multi_loop_signaller == NULL) {
     GSTCURL_ERROR_PRINT ("Couldn't malloc curl_multi_loop_signaller!");
     return;
@@ -969,7 +969,7 @@ gst_curl_http_src_curl_multi_loop (gpointer thread_data)
   g_cond_init (curl_multi_loop_signaller);
   curl_multi_loop_signal_state = GSTCURL_MULTI_LOOP_STATE_WAIT;
 
-  request_removal_mutex = g_malloc (sizeof (GMutex));
+  request_removal_mutex = g_new (GMutex, 1);
   if (request_removal_mutex == NULL) {
     GSTCURL_ERROR_PRINT ("Couldn't malloc request_removal_mutex!");
     return;
