@@ -1,0 +1,59 @@
+            _            _    _ _____  _      _     _   _                      
+           | |          | |  | |  __ \| |    | |   | | | |                     
+   __ _ ___| |_ ____ ___| |  | | |__) | |    | |__ | |_| |_ _ __  ___ _ __ ___ 
+  / _` / __| __|____/ __| |  | |  _  /| |    | '_ \| __| __| '_ \/ __| '__/ __|
+ | (_| \__ \ |_    | (__| |__| | | \ \| |____| | | | |_| |_| |_) \__ \ | | (__ 
+  \__, |___/\__|    \___|\____/|_|  \_\______|_| |_|\__|\__| .__/|___/_|  \___|
+   __/ |                                                     | |               
+  |___/                                                      |_|               
+
+
+===============================================================================
+==== A list of currently outstanding, known issues and nice-to-have things ====
+===============================================================================
+
+ This is a list of things to do in the curlhttpsrc gstreamer plugin. Here all
+ known bugs will be listed and their current status. Alongside these, there
+ are list of Time-Allocated and Nice-to-Have features and improvements that
+ have been suggested or are known to the developer(s). Time-Allocated means
+ that there is a plan by the developers to work on them at some point, whereas
+ the Nice-to-have list is full of things that would be great to include, but
+ at the moment they can't be justified.
+
+ Bugs are always worth squashing.
+
+ If you feel like you want to attempt anything on this list, feel free to send
+ a patch or submit a pull request on our github project!
+
+===============================================================================
+| #    | Name and Short Description                                  | STATUS |
+===============================================================================
+| 1    | Known Bugs                                                           |
+-------------------------------------------------------------------------------
+===============================================================================
+| 2    | New Features (Time-Allocated)                                        |
+-------------------------------------------------------------------------------
+| 2.1  | Allow for Chunked delivery of requests                      | OPEN   |
+|      |                                                             | [#279] |
+|      |   Return the received message as each chunk is read with    |        |
+|      |   gst_curl_http_src_get_chunks instead of handing it back   |        |
+|      |   as one large buffer.                                      |        |
+===============================================================================
+| 3    | Feature Improvements (Time-Allocated)                                |
+-------------------------------------------------------------------------------
+| 3.1  | Improve GstTask usage to fit with the GLib/GStreamer style  | OPEN   |
+|      |                                                             | [#278] |
+|      |   Currently, the curl worker task is operating like a       |        |
+|      |   pthread, not like a GstTask. This should be changed, so   |        |
+|      |   as to operate as a looping function and losing the while  |        |
+|      |   loop currently acheiving this task.                       |        |
+===============================================================================
+| 4    | New Features (Nice-to-have)                                          |
+-------------------------------------------------------------------------------
+===============================================================================
+| 5    | Feature Improvements (Nice-to-have)                                  |
+-------------------------------------------------------------------------------
+===============================================================================
+
+(c) British Broadcasting Corporation - Research & Development - 2014
+
