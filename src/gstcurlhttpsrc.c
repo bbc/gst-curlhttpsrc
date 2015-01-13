@@ -186,24 +186,24 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
   gobject_class->get_property = gst_curl_http_src_get_property;
 
   g_object_class_install_property (gobject_class, PROP_URI,
-      g_param_spec_string ("uri", "URI", "URI of resource requested",
+      g_param_spec_string ("location", "Location", "URI of resource to read",
           GSTCURL_HANDLE_DEFAULT_CURLOPT_URL,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_PROXYURI,
-      g_param_spec_string ("proxy", "Proxy", "URI of HTTP/S proxy server",
+      g_param_spec_string ("proxy", "Proxy", "URI of HTTP proxy server",
           GSTCURL_HANDLE_DEFAULT_CURLOPT_PROXY,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_PROXYUSERNAME,
-      g_param_spec_string ("proxy-username", "Proxy-Username",
-          "Username to supply to proxy server",
+      g_param_spec_string ("proxy-id", "proxy-id",
+          "HTTP proxy URI user id for authentication",
           GSTCURL_HANDLE_DEFAULT_CURLOPT_PROXYUSERNAME,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_PROXYPASSWORD,
-      g_param_spec_string ("proxy-password", "Proxy-Password",
-          "Password to supply to proxy server",
+      g_param_spec_string ("proxy-pw", "proxy-pw",
+          "HTTP proxy URI password for authentication",
           GSTCURL_HANDLE_DEFAULT_CURLOPT_PROXYPASSWORD,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
