@@ -561,29 +561,31 @@ gst_curl_http_src_create_easy_handle (GstCurlHttpSrc * s)
    * then something very bad is going on. */
   curl_easy_setopt (handle, CURLOPT_URL, s->uri);
 
-  gst_curl_setopt_str (handle, CURLOPT_PROXY, s->proxy_uri);
-  gst_curl_setopt_str (handle, CURLOPT_NOPROXY, s->no_proxy_list);
-  gst_curl_setopt_str (handle, CURLOPT_PROXYUSERNAME, s->proxy_user);
-  gst_curl_setopt_str (handle, CURLOPT_PROXYPASSWORD, s->proxy_pass);
+  gst_curl_setopt_str (s, handle, CURLOPT_PROXY, s->proxy_uri);
+  gst_curl_setopt_str (s, handle, CURLOPT_NOPROXY, s->no_proxy_list);
+  gst_curl_setopt_str (s, handle, CURLOPT_PROXYUSERNAME, s->proxy_user);
+  gst_curl_setopt_str (s, handle, CURLOPT_PROXYPASSWORD, s->proxy_pass);
 
   for (i = 0; i < s->number_cookies; i++) {
-    gst_curl_setopt_str (handle, CURLOPT_COOKIELIST, s->cookies[i]);
+    gst_curl_setopt_str (s, handle, CURLOPT_COOKIELIST, s->cookies[i]);
   }
 
-  gst_curl_setopt_str_default (handle, CURLOPT_USERAGENT, s->user_agent);
+  gst_curl_setopt_str_default (s, handle, CURLOPT_USERAGENT, s->user_agent);
 
-  gst_curl_setopt_int (handle, CURLOPT_FOLLOWLOCATION, s->allow_3xx_redirect);
-  gst_curl_setopt_int_default (handle, CURLOPT_MAXREDIRS, s->max_3xx_redirects);
-  gst_curl_setopt_int (handle, CURLOPT_TCP_KEEPALIVE, s->keep_alive);
+  gst_curl_setopt_int (s, handle, CURLOPT_FOLLOWLOCATION,
+                       s->allow_3xx_redirect);
+  gst_curl_setopt_int_default (s, handle, CURLOPT_MAXREDIRS,
+                               s->max_3xx_redirects);
+  gst_curl_setopt_int (s, handle, CURLOPT_TCP_KEEPALIVE, s->keep_alive);
 
   switch (s->preferred_http_version) {
     case GSTCURL_HTTP_VERSION_1_0:
       GST_DEBUG_OBJECT (s, "Setting version as HTTP/1.0");
-      gst_curl_setopt_int (handle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
+      gst_curl_setopt_int (s, handle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
       break;
     case GSTCURL_HTTP_VERSION_1_1:
       GST_DEBUG_OBJECT (s, "Setting version as HTTP/1.1");
-      gst_curl_setopt_int (handle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+      gst_curl_setopt_int (s, handle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
       break;
     case GSTCURL_HTTP_VERSION_2_0:
       GST_DEBUG_OBJECT (s, "Setting version as HTTP/2.0");
