@@ -126,6 +126,8 @@ struct _GstCurlHttpSrc
    */
   /* Type         Name                                      Curl Option */
   gchar *uri;                   /* CURLOPT_URL */
+  gchar *username;              /* CURLOPT_USERNAME */
+  gchar *password;              /* CURLOPT_PASSWORD */
   gchar *proxy_uri;             /* CURLOPT_PROXY */
   gchar *no_proxy_list;         /* CURLOPT_NOPROXY */
   gchar *proxy_user;            /* CURLOPT_PROXYUSERNAME */
@@ -225,6 +227,8 @@ enum
 {
   PROP_0,
   PROP_URI,
+  PROP_USERNAME,
+  PROP_PASSWORD,
   PROP_PROXYURI,
   PROP_PROXYUSERNAME,
   PROP_PROXYPASSWORD,

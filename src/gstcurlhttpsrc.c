@@ -190,6 +190,18 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
           GSTCURL_HANDLE_DEFAULT_CURLOPT_URL,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  g_object_class_install_property (gobject_class, PROP_USERNAME,
+      g_param_spec_string ("user-id", "user-id",
+          "HTTP location URI user id for authentication",
+          GSTCURL_HANDLE_DEFAULT_CURLOPT_USERNAME,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (gobject_class, PROP_PASSWORD,
+      g_param_spec_string ("user-pw", "user-pw",
+          "HTTP location URI password for authentication",
+          GSTCURL_HANDLE_DEFAULT_CURLOPT_PASSWORD,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
   g_object_class_install_property (gobject_class, PROP_PROXYURI,
       g_param_spec_string ("proxy", "Proxy", "URI of HTTP proxy server",
           GSTCURL_HANDLE_DEFAULT_CURLOPT_PROXY,
@@ -320,11 +332,35 @@ gst_curl_http_src_set_property (GObject * object, guint prop_id,
       }
       source->uri = g_value_dup_string (value);
       break;
+    case PROP_USERNAME:
+      if (source->username != NULL) {
+	g_free (source->username);
+      }
+      source->username = g_value_dup_string (value);
+      break;
+    case PROP_PASSWORD:
+      if (source->password != NULL) {
+	g_free (source->password);
+      }
+      source->password = g_value_dup_string (value);
+      break;
     case PROP_PROXYURI:
       if (source->proxy_uri != NULL) {
         g_free (source->uri);
       }
       source->proxy_uri = g_value_dup_string (value);
+      break;
+    case PROP_PROXYUSERNAME:
+      if (source->proxy_user != NULL) {
+	  g_free (source->proxy_user);
+      }
+      source->proxy_user = g_value_dup_string (value);
+      break;
+    case PROP_PROXYPASSWORD:
+      if (source->proxy_pass != NULL) {
+	  g_free (source->proxy_pass);
+      }
+      source->proxy_pass = g_value_dup_string (value);
       break;
     case PROP_COOKIES:
       g_strfreev (source->cookies);
@@ -388,8 +424,20 @@ gst_curl_http_src_get_property (GObject * object, guint prop_id,
     case PROP_URI:
       g_value_set_string (value, source->uri);
       break;
+    case PROP_USERNAME:
+      g_value_set_string (value, source->username);
+      break;
+    case PROP_PASSWORD:
+      g_value_set_string (value, source->password);
+      break;
     case PROP_PROXYURI:
       g_value_set_string (value, source->proxy_uri);
+      break;
+    case PROP_PROXYUSERNAME:
+      g_value_set_string (value, source->proxy_user);
+      break;
+    case PROP_PROXYPASSWORD:
+      g_value_set_string (value, source->proxy_pass);
       break;
     case PROP_COOKIES:
       g_value_set_boxed (value, source->cookies);
@@ -447,6 +495,8 @@ gst_curl_http_src_init (GstCurlHttpSrc * source)
 
   /* Assume everything is already free'd */
   source->uri = NULL;
+  source->username = GSTCURL_HANDLE_DEFAULT_CURLOPT_USERNAME;
+  source->password = GSTCURL_HANDLE_DEFAULT_CURLOPT_PASSWORD;
   source->proxy_uri = NULL;
   source->proxy_user = NULL;
   source->proxy_pass = NULL;
@@ -561,6 +611,8 @@ gst_curl_http_src_create_easy_handle (GstCurlHttpSrc * s)
    * then something very bad is going on. */
   curl_easy_setopt (handle, CURLOPT_URL, s->uri);
 
+  gst_curl_setopt_str (s, handle, CURLOPT_USERNAME, s->username);
+  gst_curl_setopt_str (s, handle, CURLOPT_PASSWORD, s->password);
   gst_curl_setopt_str (s, handle, CURLOPT_PROXY, s->proxy_uri);
   gst_curl_setopt_str (s, handle, CURLOPT_NOPROXY, s->no_proxy_list);
   gst_curl_setopt_str (s, handle, CURLOPT_PROXYUSERNAME, s->proxy_user);
