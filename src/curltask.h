@@ -72,7 +72,7 @@ GST_DEBUG_CATEGORY_STATIC (gst_curl_loop_debug);
   } \
 
 #define gst_curl_setopt_str_default(s,handle,type,option) \
-  if(option == NULL) { \
+  if((option == NULL) && (GSTCURL_HANDLE_DEFAULT_##type != NULL)) { \
     if(curl_easy_setopt(handle,type,GSTCURL_HANDLE_DEFAULT_##type) != CURLE_OK) { \
       GST_WARNING_OBJECT(s, "Cannot set unsupported option %s," #type ); \
     } \
@@ -85,6 +85,8 @@ GST_DEBUG_CATEGORY_STATIC (gst_curl_loop_debug);
 
 #define gst_curl_setopt_int_default(s,handle,type,option) \
   if((option <= GSTCURL_HANDLE_MIN_##type) || (option >= GSTCURL_HANDLE_MAX_##type)) { \
+    GST_WARNING_OBJECT(s, "Value of %d out of acceptable range for %s", option, \
+                       #type ); \
     if(curl_easy_setopt(handle,type,GSTCURL_HANDLE_DEFAULT_##type) != CURLE_OK) { \
       GST_WARNING_OBJECT(s, "Cannot set unsupported option %s," #type ); \
     } \
