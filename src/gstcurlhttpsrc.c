@@ -873,8 +873,8 @@ gst_curl_http_src_handle_response (GstCurlHttpSrc * src, GstBuffer ** buf)
 {
   GstFlowReturn ret = GST_FLOW_OK;
   GstMapInfo info;
-  GSTCURL_FUNCTION_ENTRY (s);
   glong curl_info;
+  GSTCURL_FUNCTION_ENTRY (src);
 
   /* Get back the return code for the session */
   if (curl_easy_getinfo (src->curl_handle, CURLINFO_RESPONSE_CODE,
@@ -972,7 +972,7 @@ gst_curl_http_src_handle_response (GstCurlHttpSrc * src, GstBuffer ** buf)
     memcpy (info.data, src->msg, (size_t) src->len);
   }
 
-  GSTCURL_FUNCTION_EXIT (s);
+  GSTCURL_FUNCTION_EXIT (src);
   return ret;
 }
 
@@ -1135,10 +1135,11 @@ gst_curl_http_src_urihandler_get_uri (GstURIHandler * handler)
 {
   gchar* ret;
   GstCurlHttpSrc *source;
-  GSTCURL_FUNCTION_ENTRY (source);
 
   g_return_val_if_fail (GST_IS_URI_HANDLER (handler), FALSE);
   source = GST_CURLHTTPSRC (handler);
+
+  GSTCURL_FUNCTION_ENTRY (source);
 
   g_mutex_lock(source->uri_mutex);
   ret = g_strdup (source->uri);
