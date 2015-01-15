@@ -127,7 +127,7 @@ static gboolean gst_curl_http_src_urihandler_set_uri (GstURIHandler * handler,
 static void gst_curl_http_src_curl_multi_loop (gpointer thread_data);
 static CURL *gst_curl_http_src_create_easy_handle (GstCurlHttpSrc * s);
 static gboolean gst_curl_http_src_make_request (GstCurlHttpSrc * s);
-static inline void gst_curl_http_src_destroy_easy_handle (CURL * handle);
+static inline void gst_curl_http_src_destroy_easy_handle (GstCurlHttpSrc * src);
 static size_t gst_curl_http_src_get_header (void *header, size_t size,
     size_t nmemb, GstCurlHttpSrc * s);
 static size_t gst_curl_http_src_get_chunks (void *chunk, size_t size,
@@ -1007,14 +1007,13 @@ gst_curl_http_src_negotiate_caps (GstCurlHttpSrc * src)
  * Cleanup the CURL easy handle once we're done with it.
  */
 static inline void
-gst_curl_http_src_destroy_easy_handle (CURL * handle)
+gst_curl_http_src_destroy_easy_handle (GstCurlHttpSrc * src)
 {
   /* Thank you Handles, and well done. Well done, mate. */
-  if(handle != NULL) {
-    curl_easy_cleanup (handle);
+  if(src->curl_handle != NULL) {
+    curl_easy_cleanup (src->curl_handle);
+    src->curl_handle = NULL;
   }
-
-  handle = NULL;
 }
 
 static GstStateChangeReturn
@@ -1097,7 +1096,7 @@ gst_curl_http_src_cleanup_instance(GstCurlHttpSrc *src)
   g_free(src->finished);
   src->finished = NULL;
 
-  gst_curl_http_src_destroy_easy_handle(src->curl_handle);
+  gst_curl_http_src_destroy_easy_handle(src);
 
   g_free(src->msg);
   src->msg = NULL;
