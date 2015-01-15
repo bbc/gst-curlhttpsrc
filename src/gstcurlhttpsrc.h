@@ -150,6 +150,9 @@ struct _GstCurlHttpSrc
   gboolean strict_ssl;		/* CURLOPT_SSL_VERIFYPEER */
   gchar* custom_ca_file;	/* CURLOPT_CAINFO */
 
+  gint total_retries;
+  gint retries_remaining;
+
   /*TODO As the following are all multi options, move these to curl task */
   guint max_connection_time;    /* */
   guint max_conns_per_server;   /* CURLMOPT_MAX_HOST_CONNECTIONS */
@@ -253,6 +256,7 @@ enum
   PROP_TIMEOUT,
   PROP_STRICT_SSL,
   PROP_SSL_CA_FILE,
+  PROP_RETRIES,
   PROP_CONNECTIONMAXTIME,
   PROP_MAXCONCURRENT_SERVER,
   PROP_MAXCONCURRENT_PROXY,

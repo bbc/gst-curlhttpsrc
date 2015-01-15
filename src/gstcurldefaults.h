@@ -77,6 +77,9 @@
 #define GSTCURL_HANDLE_DEFAULT_CURLMOPT_MAX_PIPELINE_LENGTH 5L
 #define GSTCURL_HANDLE_DEFAULT_CURLMOPT_MAX_TOTAL_CONNECTIONS 255L
 
+/* Not a CURLOPT, is something I've implemented which curl doesn't */
+#define GSTCURL_HANDLE_DEFAULT_RETRIES -1
+
 /*
  * Now set acceptable ranges. Defaults can lie outside the range, in which case
  * it is expected that the programmer will use the gst_curl_setopt and not the
@@ -107,5 +110,8 @@
 #define GSTCURL_HANDLE_MAX_CURLMOPT_MAX_PIPELINE_LENGTH 200L
 #define GSTCURL_HANDLE_MIN_CURLMOPT_MAX_TOTAL_CONNECTIONS 32L
 #define GSTCURL_HANDLE_MAX_CURLMOPT_MAX_TOTAL_CONNECTIONS 255L
+
+#define GSTCURL_HANDLE_MIN_RETRIES -1
+#define GSTCURL_HANDLE_MAX_RETRIES 9999
 
 #endif /* GSTCURLDEFAULTS_H_ */

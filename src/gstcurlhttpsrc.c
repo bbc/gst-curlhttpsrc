@@ -272,6 +272,12 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
           "Location of an SSL CA file to use for checking SSL certificates",
           GSTCURL_HANDLE_DEFAULT_CURLOPT_CAINFO, G_PARAM_READWRITE));
 
+  g_object_class_install_property (gobject_class, PROP_RETRIES,
+      g_param_spec_int ("retries", "Retries",
+          "Maximum number of retries until giving up (-1=infinite)",
+          GSTCURL_HANDLE_MIN_RETRIES, GSTCURL_HANDLE_MAX_RETRIES,
+          GSTCURL_HANDLE_DEFAULT_RETRIES, G_PARAM_READWRITE));
+
   g_object_class_install_property (gobject_class, PROP_CONNECTIONMAXTIME,
       g_param_spec_uint ("max-connection-time", "Max-Connection-Time",
           "Maximum amount of time to keep-alive HTTP connections",
@@ -426,6 +432,9 @@ gst_curl_http_src_set_property (GObject * object, guint prop_id,
     case PROP_SSL_CA_FILE:
       source->custom_ca_file = g_value_dup_string (value);
       break;
+    case PROP_RETRIES:
+      source->total_retries = g_value_get_int (value);
+      break;
     case PROP_CONNECTIONMAXTIME:
       source->max_connection_time = g_value_get_uint (value);
       break;
@@ -513,6 +522,9 @@ gst_curl_http_src_get_property (GObject * object, guint prop_id,
     case PROP_SSL_CA_FILE:
       g_value_set_string (value, source->custom_ca_file);
       break;
+    case PROP_RETRIES:
+      g_value_set_int (value, source->total_retries);
+      break;
     case PROP_CONNECTIONMAXTIME:
       g_value_set_uint (value, source->max_connection_time);
       break;
@@ -572,6 +584,7 @@ gst_curl_http_src_init (GstCurlHttpSrc * source)
   source->strict_ssl = GSTCURL_HANDLE_DEFAULT_CURLOPT_SSL_VERIFYPEER;
   source->custom_ca_file = NULL;
   source->preferred_http_version = pref_http_ver;
+  source->total_retries = GSTCURL_HANDLE_DEFAULT_RETRIES;
 
   gst_caps_replace(&source->caps, NULL);
   gst_base_src_set_automatic_eos (GST_BASE_SRC (source), FALSE);
@@ -628,19 +641,31 @@ gst_curl_http_src_create (GstPushSrc * psrc, GstBuffer ** outbuf)
     return GST_FLOW_EOS;
   }
 
-  src->curl_handle = gst_curl_http_src_create_easy_handle (src);
+  src->retries_remaining = src->total_retries;
 
-  if (gst_curl_http_src_make_request (src) == FALSE) {
-    return GST_FLOW_ERROR;
+  /* If total_retries is -1, it's infinite so the value of retries_remaining
+   * could be 0xDEADBEEF for all we care, it makes no difference. */
+  while((src->retries_remaining >= 0) || (src->total_retries == -1)) {
+    src->retries_remaining--;
+
+    src->curl_handle = gst_curl_http_src_create_easy_handle (src);
+
+    if (gst_curl_http_src_make_request (src) == FALSE) {
+      return GST_FLOW_ERROR;
+    }
+
+    ret = gst_curl_http_src_handle_response (src, outbuf);
+
+    gst_curl_http_src_destroy_easy_handle (src);
+
+    if (ret == GST_FLOW_OK) {
+      gst_curl_http_src_negotiate_caps (src);
+      break;
+    }
+    else if (ret == GST_FLOW_ERROR) {
+      break;
+    }
   }
-
-  ret = gst_curl_http_src_handle_response (src, outbuf);
-
-  if (ret == GST_FLOW_OK) {
-    gst_curl_http_src_negotiate_caps (src);
-  }
-
-  gst_curl_http_src_destroy_easy_handle (src->curl_handle);
 
   /* Reset the return types as our instance will be reused with a new URI */
   g_free (src->msg);
@@ -848,23 +873,23 @@ gst_curl_http_src_handle_response (GstCurlHttpSrc * src, GstBuffer ** buf)
 {
   GstFlowReturn ret = GST_FLOW_OK;
   GstMapInfo info;
-  glong http_response_code;
   GSTCURL_FUNCTION_ENTRY (s);
+  glong curl_info;
 
   /* Get back the return code for the session */
   if (curl_easy_getinfo (src->curl_handle, CURLINFO_RESPONSE_CODE,
-          &http_response_code) != CURLE_OK) {
+          &curl_info) != CURLE_OK) {
     /* Curl cannot be relied on in this state, so return an error. */
     return GST_FLOW_ERROR;
   }
 
-  if (GSTCURL_INFO_RESPONSE (http_response_code) ||
-      GSTCURL_SUCCESS_RESPONSE (http_response_code)) {
+  if (GSTCURL_INFO_RESPONSE (curl_info) ||
+      GSTCURL_SUCCESS_RESPONSE (curl_info)) {
     /* Everything should be fine. */
     GST_INFO_OBJECT (src, "Get for URI %s succeeded, response code %ld",
-        src->uri, http_response_code);
+        src->uri, curl_info);
   }
-  else if (GSTCURL_REDIRECT_RESPONSE (http_response_code)) {
+  else if (GSTCURL_REDIRECT_RESPONSE (curl_info)) {
     /* Some redirection response. souphttpsrc reports errors here, so I'm
      * going to do the same. I should only see these if:
      *  > Curl has been configured not to follow redirects
@@ -875,23 +900,66 @@ gst_curl_http_src_handle_response (GstCurlHttpSrc * src, GstBuffer ** buf)
      * flow error.
      */
     GST_WARNING_OBJECT (src, "Get for URI %s received redirection code %ld",
-        src->uri, http_response_code);
+        src->uri, curl_info);
     ret = GST_FLOW_ERROR;
+    /* Redirection limit has been exceeded, don't retry as we will only retry
+     * from original URI.
+     */
+    src->retries_remaining = 0;
   }
-  else if (GSTCURL_CLIENT_ERR_RESPONSE (http_response_code)) {
+  else if (GSTCURL_CLIENT_ERR_RESPONSE (curl_info)) {
     GST_ERROR_OBJECT (src, "Get for URI %s received client error code %ld",
-        src->uri, http_response_code);
+        src->uri, curl_info);
     ret = GST_FLOW_ERROR;
+    /* For client error, any retry with the same request is more than likely
+     * going to fail. */
+    src->retries_remaining = 0;
   }
-  else if (GSTCURL_SERVER_ERR_RESPONSE (http_response_code)) {
+  else if (GSTCURL_SERVER_ERR_RESPONSE (curl_info)) {
     GST_ERROR_OBJECT (src, "Get for URI %s received server error code %ld",
-        src->uri, http_response_code);
+        src->uri, curl_info);
     ret = GST_FLOW_ERROR;
+    /* Server isn't working, so again retries are best avoided. */
+    src->retries_remaining = 0;
   }
   else {
-    GST_FIXME_OBJECT (src, "Get for URI %s received unknown response code %ld",
-        src->uri, http_response_code);
-    ret = GST_FLOW_CUSTOM_ERROR;
+    /*
+     * If we got here, odds are that no actual conversation between client and
+     * server took place. Check for timeouts so we can try again if retries are
+     * > 0. Alternatively, this could be for an SSL-related error,
+     */
+    if (curl_easy_getinfo (src->curl_handle, CURLINFO_TOTAL_TIME,
+                           &curl_info) != CURLE_OK) {
+      /* Curl cannot be relied on in this state, so return an error. */
+      return GST_FLOW_ERROR;
+    }
+
+    if (curl_info > src->timeout_secs) {
+      GST_ERROR_OBJECT (src, "Request for URI %s timed out after %d seconds.",
+                        src->uri, src->timeout_secs);
+    }
+
+    if (curl_easy_getinfo (src->curl_handle, CURLINFO_OS_ERRNO,
+                           &curl_info) != CURLE_OK) {
+      /* Curl cannot be relied on in this state, so return an error. */
+      return GST_FLOW_ERROR;
+    }
+
+    GST_WARNING_OBJECT (src, "Errno for CONNECT call was %ld (%s)", curl_info,
+                        g_strerror((gint) curl_info));
+
+    /* Some of these responses are retry-able, others not. Set the returned
+     * state to ERROR so we crash out instead of fruitlessly attempting.
+     */
+    if (curl_info == ECONNREFUSED) {
+	ret = GST_FLOW_ERROR;
+    }
+    else {
+      /* Don't die, but don't continue as if everything's okay either. Let the
+       * retry logic decide next course of action. */
+      ret = GST_FLOW_CUSTOM_SUCCESS;
+      src->end_of_message = FALSE;
+    }
   }
 
   /*
