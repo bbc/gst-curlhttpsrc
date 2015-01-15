@@ -228,6 +228,11 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
           "URI of resource requested", GSTCURL_HANDLE_DEFAULT_CURLOPT_USERAGENT,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  g_object_class_install_property (gobject_class, PROP_COMPRESS,
+      g_param_spec_boolean ("compress", "Compress",
+          "Allow compressed content encodings",
+          GSTCURL_HANDLE_DEFAULT_CURLOPT_ACCEPT_ENCODING, G_PARAM_READWRITE));
+
   g_object_class_install_property (gobject_class, PROP_REDIRECT,
       g_param_spec_boolean ("automatic-redirect", "automatic-redirect",
           "Allow HTTP Redirections (HTTP Status Code 300 series)",
@@ -244,6 +249,28 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
       g_param_spec_boolean ("keep-alive", "Keep-Alive",
           "Toggle keep-alive for connection reuse.",
           GSTCURL_HANDLE_DEFAULT_CURLOPT_TCP_KEEPALIVE, G_PARAM_READWRITE));
+
+  g_object_class_install_property (gobject_class, PROP_TIMEOUT,
+      g_param_spec_int ("timeout", "Timeout",
+          "Value in seconds before timeout a blocking request (0 = no timeout)",
+          GSTCURL_HANDLE_MIN_CURLOPT_TIMEOUT,
+          GSTCURL_HANDLE_MAX_CURLOPT_TIMEOUT,
+          GSTCURL_HANDLE_DEFAULT_CURLOPT_TIMEOUT, G_PARAM_READWRITE));
+
+  g_object_class_install_property (gobject_class, PROP_HEADERS,
+      g_param_spec_boxed ("extra-headers", "Extra Headers",
+          "Extra headers to append to the HTTP request",
+          G_TYPE_STRV, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (gobject_class, PROP_STRICT_SSL,
+      g_param_spec_boolean ("ssl-strict", "SSL Strict",
+          "Strict SSL certificate checking",
+          GSTCURL_HANDLE_DEFAULT_CURLOPT_SSL_VERIFYPEER, G_PARAM_READWRITE));
+
+  g_object_class_install_property (gobject_class, PROP_SSL_CA_FILE,
+      g_param_spec_string ("ssl-ca-file", "SSL CA File",
+          "Location of an SSL CA file to use for checking SSL certificates",
+          GSTCURL_HANDLE_DEFAULT_CURLOPT_CAINFO, G_PARAM_READWRITE));
 
   g_object_class_install_property (gobject_class, PROP_CONNECTIONMAXTIME,
       g_param_spec_uint ("max-connection-time", "Max-Connection-Time",
@@ -373,6 +400,14 @@ gst_curl_http_src_set_property (GObject * object, guint prop_id,
       }
       source->user_agent = g_value_dup_string (value);
       break;
+    case PROP_HEADERS:
+      g_strfreev (source->extra_headers);
+      source->extra_headers = g_strdupv (g_value_get_boxed (value));
+      source->number_headers = g_strv_length (source->extra_headers);
+      break;
+    case PROP_COMPRESS:
+      source->accept_compressed_encodings = g_value_get_boolean (value);
+      break;
     case PROP_REDIRECT:
       source->allow_3xx_redirect = g_value_get_boolean (value);
       break;
@@ -381,6 +416,15 @@ gst_curl_http_src_set_property (GObject * object, guint prop_id,
       break;
     case PROP_KEEPALIVE:
       source->keep_alive = g_value_get_boolean (value);
+      break;
+    case PROP_TIMEOUT:
+      source->timeout_secs = g_value_get_int (value);
+      break;
+    case PROP_STRICT_SSL:
+      source->strict_ssl = g_value_get_boolean (value);
+      break;
+    case PROP_SSL_CA_FILE:
+      source->custom_ca_file = g_value_dup_string (value);
       break;
     case PROP_CONNECTIONMAXTIME:
       source->max_connection_time = g_value_get_uint (value);
@@ -445,6 +489,12 @@ gst_curl_http_src_get_property (GObject * object, guint prop_id,
     case PROP_USERAGENT:
       g_value_set_string (value, source->user_agent);
       break;
+    case PROP_HEADERS:
+      g_value_set_boxed (value, source->extra_headers);
+      break;
+    case PROP_COMPRESS:
+      g_value_set_boolean (value, source->accept_compressed_encodings);
+      break;
     case PROP_REDIRECT:
       g_value_set_boolean (value, source->allow_3xx_redirect);
       break;
@@ -453,6 +503,15 @@ gst_curl_http_src_get_property (GObject * object, guint prop_id,
       break;
     case PROP_KEEPALIVE:
       g_value_set_boolean (value, source->keep_alive);
+      break;
+    case PROP_TIMEOUT:
+      g_value_set_int (value, source->timeout_secs);
+      break;
+    case PROP_STRICT_SSL:
+      g_value_set_boolean (value, source->strict_ssl);
+      break;
+    case PROP_SSL_CA_FILE:
+      g_value_set_string (value, source->custom_ca_file);
       break;
     case PROP_CONNECTIONMAXTIME:
       g_value_set_uint (value, source->max_connection_time);
@@ -503,10 +562,15 @@ gst_curl_http_src_init (GstCurlHttpSrc * source)
   source->cookies = NULL;
   source->user_agent = GSTCURL_HANDLE_DEFAULT_CURLOPT_USERAGENT;
   source->number_cookies = 0;
+  source->extra_headers = NULL;
+  source->number_headers = 0;
   source->end_of_message = FALSE;
   source->allow_3xx_redirect = GSTCURL_HANDLE_DEFAULT_CURLOPT_FOLLOWLOCATION;
   source->max_3xx_redirects = GSTCURL_HANDLE_DEFAULT_CURLOPT_MAXREDIRS;
   source->keep_alive = GSTCURL_HANDLE_DEFAULT_CURLOPT_TCP_KEEPALIVE;
+  source->timeout_secs = GSTCURL_HANDLE_DEFAULT_CURLOPT_TIMEOUT;
+  source->strict_ssl = GSTCURL_HANDLE_DEFAULT_CURLOPT_SSL_VERIFYPEER;
+  source->custom_ca_file = NULL;
   source->preferred_http_version = pref_http_ver;
 
   gst_caps_replace(&source->caps, NULL);
@@ -622,13 +686,38 @@ gst_curl_http_src_create_easy_handle (GstCurlHttpSrc * s)
     gst_curl_setopt_str (s, handle, CURLOPT_COOKIELIST, s->cookies[i]);
   }
 
+  /* curl_slist_append dynamically allocates memory, but I need to free it */
+  for (i = 0; i < s->number_headers; i++) {
+    s->slist = curl_slist_append(s->slist, s->extra_headers[i]);
+  }
+  if(s->slist != NULL) {
+      curl_easy_setopt(handle, CURLOPT_HTTPHEADER, s->slist);
+  }
+
   gst_curl_setopt_str_default (s, handle, CURLOPT_USERAGENT, s->user_agent);
+
+  /*
+   * Unlike soup, this isn't a binary op, curl wants a string here. So if it's
+   * TRUE, simply set the value as an empty string as this allows both gzip and
+   * zlib compression methods.
+   */
+  if(s->accept_compressed_encodings == TRUE) {
+      curl_easy_setopt(handle, CURLOPT_ACCEPT_ENCODING, "");
+  }
+  else {
+      curl_easy_setopt(handle, CURLOPT_ACCEPT_ENCODING, "identity");
+  }
 
   gst_curl_setopt_int (s, handle, CURLOPT_FOLLOWLOCATION,
                        s->allow_3xx_redirect);
   gst_curl_setopt_int_default (s, handle, CURLOPT_MAXREDIRS,
-                               s->max_3xx_redirects);
-  gst_curl_setopt_int (s, handle, CURLOPT_TCP_KEEPALIVE, s->keep_alive);
+                       s->max_3xx_redirects);
+  gst_curl_setopt_int (s, handle, CURLOPT_TCP_KEEPALIVE,
+                       GSTCURL_BINARYBOOL (s->keep_alive));
+  gst_curl_setopt_int (s, handle, CURLOPT_TIMEOUT, s->timeout_secs);
+  gst_curl_setopt_int (s, handle, CURLOPT_SSL_VERIFYPEER,
+                       GSTCURL_BINARYBOOL (s->strict_ssl));
+  gst_curl_setopt_str (s, handle, CURLOPT_CAINFO, s->custom_ca_file);
 
   switch (s->preferred_http_version) {
     case GSTCURL_HTTP_VERSION_1_0:

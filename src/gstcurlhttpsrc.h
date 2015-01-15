@@ -133,12 +133,23 @@ struct _GstCurlHttpSrc
   gchar *proxy_user;            /* CURLOPT_PROXYUSERNAME */
   gchar *proxy_pass;            /* CURLOPT_PROXYPASSWORD */
 
+  /* Header options */
   gchar **cookies;              /* CURLOPT_COOKIELIST */
   gint number_cookies;
   gchar *user_agent;            /* CURLOPT_USERAGENT */
+  gchar **extra_headers;        /* CURLOPT_HTTPHEADER */
+  gint number_headers;
+  struct curl_slist *slist;
+  gboolean accept_compressed_encodings; /* CURLOPT_ACCEPT_ENCODING */
+
+  /* Connection options */
   glong allow_3xx_redirect;     /* CURLOPT_FOLLOWLOCATION */
   glong max_3xx_redirects;      /* CURLOPT_MAXREDIRS */
   gboolean keep_alive;          /* CURLOPT_TCP_KEEPALIVE */
+  gint timeout_secs;            /* CURLOPT_TIMEOUT */
+  gboolean strict_ssl;		/* CURLOPT_SSL_VERIFYPEER */
+  gchar* custom_ca_file;	/* CURLOPT_CAINFO */
+
   /*TODO As the following are all multi options, move these to curl task */
   guint max_connection_time;    /* */
   guint max_conns_per_server;   /* CURLMOPT_MAX_HOST_CONNECTIONS */
@@ -234,9 +245,14 @@ enum
   PROP_PROXYPASSWORD,
   PROP_COOKIES,
   PROP_USERAGENT,
+  PROP_HEADERS,
+  PROP_COMPRESS,
   PROP_REDIRECT,
   PROP_MAXREDIRECT,
   PROP_KEEPALIVE,
+  PROP_TIMEOUT,
+  PROP_STRICT_SSL,
+  PROP_SSL_CA_FILE,
   PROP_CONNECTIONMAXTIME,
   PROP_MAXCONCURRENT_SERVER,
   PROP_MAXCONCURRENT_PROXY,

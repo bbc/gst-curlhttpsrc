@@ -99,6 +99,9 @@ GST_DEBUG_CATEGORY_STATIC (gst_curl_loop_debug);
 
 #define GSTCURL_ASSERT_MUTEX(x) if(g_atomic_pointer_get(&x->p) == NULL) GSTCURL_DEBUG_PRINT("ASSERTION: No valid mutex handle in GMutex %p", x);
 
+/* As gboolean is either 0x0 or 0xffffffff, this sanitises things for curl. */
+#define GSTCURL_BINARYBOOL(x) ((x != 0)?1:0)
+
 /*
  * Function definitions
  */
