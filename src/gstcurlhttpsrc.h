@@ -105,11 +105,40 @@ G_BEGIN_DECLS
 #endif
 typedef struct _GstCurlHttpSrc GstCurlHttpSrc;
 typedef struct _GstCurlHttpSrcClass GstCurlHttpSrcClass;
+typedef struct _GstCurlHttpSrcMultiTaskContext GstCurlHttpSrcMultiTaskContext;
 typedef struct _GstCurlHttpSrcQueueElement GstCurlHttpSrcQueueElement;
+
+struct _GstCurlHttpSrcMultiTaskContext
+{
+  GstTask     *task;
+  GRecMutex   task_rec_mutex;
+  GMutex      mutex;
+  guint       refcount;
+  GCond       signal;
+
+  GstCurlHttpSrc  *request_removal_element;
+
+  GstCurlHttpSrcQueueElement  *queue;
+
+  enum
+  {
+    GSTCURL_MULTI_LOOP_STATE_WAIT = 0,
+    GSTCURL_MULTI_LOOP_STATE_QUEUE_EVENT,
+    GSTCURL_MULTI_LOOP_STATE_RUNNING,
+    GSTCURL_MULTI_LOOP_STATE_REQUEST_REMOVAL,
+    GSTCURL_MULTI_LOOP_STATE_STOP,
+    GSTCURL_MULTI_LOOP_STATE_MAX
+  } state;
+
+  /* < private > */
+  CURLM *multi_handle;
+};
 
 struct _GstCurlHttpSrcClass
 {
   GstPushSrcClass parent_class;
+
+  GstCurlHttpSrcMultiTaskContext multi_task_context;
 };
 
 /*
@@ -170,19 +199,12 @@ struct _GstCurlHttpSrc
     GSTCURL_HTTP_VERSION_MAX
   } preferred_http_version;     /* CURLOPT_HTTP_VERSION */
 
-  /*
-   * Mutex for the curl task to hold while it's working.
-   *
-   * It seems we need to add two mutexes, because the calling thread isn't
-   * fast enough to execute before the worker thread attempts to do its thing
-   * and so everything goes pear shaped.
-   */
-  GMutex *mutex;
   GCond *finished;
   enum
   {
     GSTCURL_RETURN_NONE,
     GSTCURL_RETURN_DONE,
+    GSTCURL_RETURN_REMOVED,
     GSTCURL_RETURN_BAD_QUEUE_REQUEST,
     GSTCURL_RETURN_TOTAL_ERROR,
     GSTCURL_RETURN_PIPELINE_NULL,
@@ -203,39 +225,6 @@ struct _GstCurlHttpSrc
 
   GstCaps *caps;
 };
-
-struct _GstCurlHttpSrcQueueElement
-{
-  GstCurlHttpSrc *p;
-  GstCurlHttpSrcQueueElement *next;
-  GMutex *running;
-};
-
-GstCurlHttpSrcQueueElement *request_queue;
-GMutex *request_queue_mutex;
-
-GCond *curl_multi_loop_signaller;
-GMutex *curl_multi_loop_signal_mutex;
-enum
-{
-  GSTCURL_MULTI_LOOP_STATE_WAIT = 0,
-  GSTCURL_MULTI_LOOP_STATE_QUEUE_EVENT,
-  GSTCURL_MULTI_LOOP_STATE_RUNNING,
-  GSTCURL_MULTI_LOOP_STATE_REQUEST_REMOVAL,
-  GSTCURL_MULTI_LOOP_STATE_STOP,
-  GSTCURL_MULTI_LOOP_STATE_MAX
-} curl_multi_loop_signal_state;
-
-GMutex GstCurlHttpSrcLoopRefcountMutex;
-guint GstCurlHttpSrcLoopRefcount;
-
-GstTask *GstCurlHttpSrcLoopTask;
-GRecMutex GstCurlHttpSrcLoopRecMutex;
-GCond GstCurlHttpSrcLoopReadyCond;
-GMutex GstCurlHttpSrcLoopReadyMutex;
-
-GMutex *request_removal_mutex;
-GstCurlHttpSrc *request_removal_element;
 
 enum
 {

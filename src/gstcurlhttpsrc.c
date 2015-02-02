@@ -82,9 +82,11 @@
 #endif
 
 #include "gstcurlhttpsrc.h"
+#include "gstcurlqueue.h"
 
 GST_DEBUG_CATEGORY_STATIC (gst_curl_http_src_debug);
 #define GST_CAT_DEFAULT gst_curl_http_src_debug
+GST_DEBUG_CATEGORY_STATIC (gst_curl_loop_debug);
 
 /*
  * Make a source pad template to be able to kick out recv'd data
@@ -104,6 +106,9 @@ static void gst_curl_http_src_set_property (GObject * object, guint prop_id,
 static void gst_curl_http_src_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
 static void gst_curl_http_src_init (GstCurlHttpSrc * source);
+static void gst_curl_http_src_ref_multi (GstCurlHttpSrc *src);
+static void gst_curl_http_src_unref_multi (GstCurlHttpSrc *src);
+static void gst_curl_http_src_finalize (GObject *obj);
 static GstFlowReturn gst_curl_http_src_create (GstPushSrc * psrc,
     GstBuffer ** outbuf);
 static GstFlowReturn
@@ -132,12 +137,7 @@ static size_t gst_curl_http_src_get_header (void *header, size_t size,
     size_t nmemb, GstCurlHttpSrc * s);
 static size_t gst_curl_http_src_get_chunks (void *chunk, size_t size,
     size_t nmemb, GstCurlHttpSrc * s);
-static gboolean gst_curl_http_src_signal_finished (CURL * handle, gint reason);
-static void inline
-gst_curl_http_src_recurse_queue_cleanup (GstCurlHttpSrcQueueElement * element,
-    gint reason);
 static void gst_curl_http_src_request_remove (GstCurlHttpSrc * src);
-
 static char *gst_curl_http_src_strcasestr (const char *haystack,
     const char *needle);
 
@@ -184,6 +184,7 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
 
   gobject_class->set_property = gst_curl_http_src_set_property;
   gobject_class->get_property = gst_curl_http_src_get_property;
+  gobject_class->finalize = gst_curl_http_src_finalize;
 
   g_object_class_install_property (gobject_class, PROP_URI,
       g_param_spec_string ("location", "Location", "URI of resource to read",
@@ -333,15 +334,9 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
   gst_debug_log (gst_curl_loop_debug, GST_LEVEL_INFO, __FILE__, __func__,
       __LINE__, NULL, "Testing the curl_multi_loop debugging prints");
 
-  /*
-   * TODO: These all leak as I can never free() them as GStreamer doesn't
-   * seem to actually include the ability to tell me that the pipeline is
-   * being cleaned up outside the scope of my own element.
-   */
-  g_mutex_init (&GstCurlHttpSrcLoopReadyMutex);
-  g_cond_init (&GstCurlHttpSrcLoopReadyCond);
-  g_rec_mutex_init (&GstCurlHttpSrcLoopRecMutex);
-  g_mutex_init (&GstCurlHttpSrcLoopRefcountMutex);
+  g_mutex_init(&klass->multi_task_context.mutex);
+  g_cond_init(&klass->multi_task_context.signal);
+  g_rec_mutex_init(&klass->multi_task_context.task_rec_mutex);
 
   gst_element_class_set_details_simple (gstelement_class,
       "HTTP Client Source using libcURL",
@@ -592,8 +587,6 @@ gst_curl_http_src_init (GstCurlHttpSrc * source)
   source->proxy_uri = g_strdup (g_getenv ("http_proxy"));
   source->no_proxy_list = g_strdup (g_getenv ("no_proxy"));
 
-  source->mutex = g_new (GMutex, 1);
-  g_mutex_init (source->mutex);
   source->finished = g_new (GCond, 1);
   g_cond_init (source->finished);
   source->uri_mutex = g_new (GMutex, 1);;
@@ -602,28 +595,113 @@ gst_curl_http_src_init (GstCurlHttpSrc * source)
   /*
    * Check that the CURL worker thread is running. If it isn't, start it.
    */
-  g_mutex_lock (&GstCurlHttpSrcLoopRefcountMutex);
-  if (GstCurlHttpSrcLoopRefcount == 0) {
-    g_mutex_lock (&GstCurlHttpSrcLoopReadyMutex);
-    GstCurlHttpSrcLoopTask = gst_task_new (
-        (GstTaskFunction) gst_curl_http_src_curl_multi_loop, NULL, NULL);
-    gst_task_set_lock (GstCurlHttpSrcLoopTask, &GstCurlHttpSrcLoopRecMutex);
-    if (gst_task_start (GstCurlHttpSrcLoopTask) == FALSE) {
-      /*
-       * This is a pretty critical failure and is not recoverable, so
-       * commit sudoku and run away.
-       */
-      GSTCURL_ERROR_PRINT ("Couldn't start Curl Multi Loop task!");
-      abort ();
-    }
-    g_cond_wait (&GstCurlHttpSrcLoopReadyCond, &GstCurlHttpSrcLoopReadyMutex);
-    GSTCURL_INFO_PRINT ("Curl Multi loop has been correctly initialised!");
-    g_mutex_unlock (&GstCurlHttpSrcLoopReadyMutex);
-  }
-  GstCurlHttpSrcLoopRefcount++;
-  g_mutex_unlock (&GstCurlHttpSrcLoopRefcountMutex);
+  gst_curl_http_src_ref_multi(source);
 
   GSTCURL_FUNCTION_EXIT (source);
+}
+
+/*
+ * Check if the Curl multi loop has been started. If not, initialise it and
+ * start it running. If it is already running, increment the refcount.
+ */
+static void
+gst_curl_http_src_ref_multi (GstCurlHttpSrc *src) {
+  GstCurlHttpSrcClass *klass;
+
+  GSTCURL_FUNCTION_ENTRY (source);
+
+  /*klass = (GstCurlHttpSrcClass) g_type_class_peek_parent (src);*/
+  klass = G_TYPE_INSTANCE_GET_CLASS (src, GST_TYPE_CURL_HTTP_SRC,
+                                     GstCurlHttpSrcClass);
+
+  g_mutex_lock(&klass->multi_task_context.mutex);
+  if(klass->multi_task_context.refcount == 0) {
+    /* Set up various in-task properties */
+
+    /* NULL is treated as the start of the list, no need to allocate. */
+    klass->multi_task_context.queue = NULL;
+
+    /* set up curl */
+    klass->multi_task_context.multi_handle = curl_multi_init ();
+
+    curl_multi_setopt (klass->multi_task_context.multi_handle,
+                       CURLMOPT_PIPELINING, 1);
+    curl_multi_setopt (klass->multi_task_context.multi_handle,
+                       CURLMOPT_MAX_HOST_CONNECTIONS, 1);
+
+    /* Start the thread */
+    klass->multi_task_context.task = gst_task_new (
+            (GstTaskFunction) gst_curl_http_src_curl_multi_loop,
+            (gpointer) &klass->multi_task_context, NULL);
+    gst_task_set_lock (klass->multi_task_context.task,
+                       &klass->multi_task_context.task_rec_mutex);
+    if (gst_task_start (klass->multi_task_context.task) == FALSE) {
+      /*
+       * This is a pretty critical failure and is not recoverable, so commit
+       * sudoku and run away.
+       */
+      GSTCURL_ERROR_PRINT("Couldn't start curl_multi task! Aborting.");
+      abort ();
+    }
+    GSTCURL_INFO_PRINT("Curl multi loop has been correctly initialised!");
+  }
+  klass->multi_task_context.refcount++;
+  g_mutex_unlock(&klass->multi_task_context.mutex);
+
+  GSTCURL_FUNCTION_EXIT (source);
+}
+
+/*
+ * Decrement the reference count on the curl multi loop. If this is called by
+ * the last instance to hold a reference, shut down the worker. (Otherwise
+ * GStreamer can't close down with a thread still running). Also offers the
+ * "force_all" boolean parameter, which if TRUE removes all references and shuts
+ * down.
+ */
+static void
+gst_curl_http_src_unref_multi (GstCurlHttpSrc *src)
+{
+  GstCurlHttpSrcClass *klass;
+
+  GSTCURL_FUNCTION_ENTRY (src);
+
+  klass = G_TYPE_INSTANCE_GET_CLASS (src, GST_TYPE_CURL_HTTP_SRC,
+                                     GstCurlHttpSrcClass);
+
+  g_mutex_lock(&klass->multi_task_context.mutex);
+
+  GST_INFO_OBJECT (src, "Closing instance, worker thread refcount is now %u",
+                   --klass->multi_task_context.refcount);
+
+  if(klass->multi_task_context.refcount <= 0) {
+    /* Everything's done! Clean up. */
+    gst_task_pause (klass->multi_task_context.task);
+    klass->multi_task_context.state = GSTCURL_MULTI_LOOP_STATE_STOP;
+    g_cond_signal (&klass->multi_task_context.signal);
+    g_mutex_unlock (&klass->multi_task_context.mutex);
+    gst_task_join (klass->multi_task_context.task);
+  }
+  else {
+    g_mutex_unlock(&klass->multi_task_context.mutex);
+  }
+
+  GSTCURL_FUNCTION_EXIT (src);
+}
+
+static void
+gst_curl_http_src_finalize (GObject *obj)
+{
+  GstCurlHttpSrc *src = GST_CURLHTTPSRC (obj);
+
+  GSTCURL_FUNCTION_ENTRY (src);
+
+  /* Unref the curl_multi task. If nothing else holds a reference, stop it. */
+  gst_curl_http_src_unref_multi (src);
+
+  /* Cleanup all memory allocated */
+  gst_curl_http_src_cleanup_instance (src);
+
+  GSTCURL_FUNCTION_EXIT(src);
 }
 
 static GstFlowReturn
@@ -780,57 +858,27 @@ gst_curl_http_src_create_easy_handle (GstCurlHttpSrc * s)
 static gboolean
 gst_curl_http_src_make_request (GstCurlHttpSrc * s)
 {
-  GstCurlHttpSrcQueueElement *element;
+  GstCurlHttpSrcClass *klass;
   gboolean ret = FALSE;
-  GSTCURL_FUNCTION_ENTRY (s);
 
-  s->result = GSTCURL_RETURN_NONE;
-  if (s->curl_handle == NULL) {
-    return ret;
-  }
-  g_mutex_lock (s->mutex);
-  g_mutex_lock (request_queue_mutex);
-  if (request_queue == NULL) {
-    /* Queue is currently empty, so create a new item on the head */
-    request_queue = g_new0 (GstCurlHttpSrcQueueElement, 1);
-    if (request_queue == NULL) {
-      GST_ERROR_OBJECT (s, "Couldn't allocate space for request queue!");
-      return ret;
-    }
-    request_queue->p = s;
-    request_queue->running = g_new (GMutex, 1);
-    g_mutex_init (request_queue->running);
-    GSTCURL_ASSERT_MUTEX (request_queue->running);
-    request_queue->next = NULL;
-  }
-  else {
-    element = request_queue;
-    while (element->next != NULL) {
-      element = element->next;
-    }
-    element->next = g_new (GstCurlHttpSrcQueueElement, 1);
-    if (element->next == NULL) {
-      GST_ERROR_OBJECT (s, "Couldn't allocate space for new queue element!");
-      return ret;
-    }
-    element->next->p = s;
-    element->next->running = g_new (GMutex, 1);
-    g_mutex_init (element->next->running);
-    GSTCURL_ASSERT_MUTEX (element->next->running);
-    element->next->next = NULL;
+  klass = G_TYPE_INSTANCE_GET_CLASS (s, GST_TYPE_CURL_HTTP_SRC,
+                                     GstCurlHttpSrcClass);
+
+  g_mutex_lock(&klass->multi_task_context.mutex);
+
+  if (gst_curl_http_src_add_queue_item (&klass->multi_task_context.queue, s)
+      == FALSE) {
+    GST_ERROR_OBJECT (s, "Couldn't create new queue item! Aborting...");
+    abort();
   }
 
   GST_DEBUG_OBJECT (s, "Submitting request for URI %s to curl", s->uri);
 
   /* Signal the worker thread */
-  g_mutex_lock (curl_multi_loop_signal_mutex);
-  curl_multi_loop_signal_state = GSTCURL_MULTI_LOOP_STATE_QUEUE_EVENT;
-  g_cond_signal (curl_multi_loop_signaller);
-  g_mutex_unlock (request_queue_mutex);
-  g_mutex_unlock (curl_multi_loop_signal_mutex);
-
-  g_cond_wait (s->finished, s->mutex);
-  g_mutex_unlock (s->mutex);
+  klass->multi_task_context.state = GSTCURL_MULTI_LOOP_STATE_QUEUE_EVENT;
+  g_cond_signal (&klass->multi_task_context.signal);
+  g_cond_wait (s->finished, &klass->multi_task_context.mutex);
+  g_mutex_unlock (&klass->multi_task_context.mutex);
 
   switch (s->result) {
     case GSTCURL_RETURN_NONE:
@@ -1027,24 +1075,6 @@ gst_curl_http_src_change_state (GstElement * element, GstStateChange transition)
     case GST_STATE_CHANGE_READY_TO_NULL:
       /* The pipeline has ended, so signal any running request to end. */
       gst_curl_http_src_request_remove (source);
-      /* Decrement the refcount on the multi task, if it's then 0 we need to
-       * tell it to end as there's no-one else that needs it. */
-      g_mutex_lock (&GstCurlHttpSrcLoopRefcountMutex);
-      GstCurlHttpSrcLoopRefcount--;
-      GST_INFO_OBJECT (source, "Closing instance, worker thread refcount is %u",
-                       GstCurlHttpSrcLoopRefcount);
-      if (GstCurlHttpSrcLoopRefcount == 0) {
-        g_mutex_lock (curl_multi_loop_signal_mutex);
-        /* Signal the GstTask to pause so it doesn't loop around before
-         * we get a chance to gst_task_join() it. */
-        gst_task_pause (GstCurlHttpSrcLoopTask);
-        curl_multi_loop_signal_state = GSTCURL_MULTI_LOOP_STATE_STOP;
-        g_cond_signal (curl_multi_loop_signaller);
-        g_mutex_unlock (curl_multi_loop_signal_mutex);
-        gst_task_join (GstCurlHttpSrcLoopTask);
-      }
-      g_mutex_unlock (&GstCurlHttpSrcLoopRefcountMutex);
-      gst_curl_http_src_cleanup_instance(source);
       break;
     default:
       break;
@@ -1089,9 +1119,6 @@ gst_curl_http_src_cleanup_instance(GstCurlHttpSrc *src)
   g_free(src->cookies);
   src->cookies = NULL;
 
-  g_mutex_clear(src->mutex);
-  g_free(src->mutex);
-  src->mutex = NULL;
   g_cond_clear(src->finished);
   g_free(src->finished);
   src->finished = NULL;
@@ -1181,265 +1208,181 @@ gst_curl_http_src_urihandler_set_uri (GstURIHandler * handler,
 /*****************************************************************************
  * Curl loop task functions begin
  *****************************************************************************/
-
 static void
 gst_curl_http_src_curl_multi_loop (gpointer thread_data)
 {
-  CURLM *multi_handle;
+  GstCurlHttpSrcMultiTaskContext* context;
+  GstCurlHttpSrcQueueElement *qelement;
+  int i, still_running;
+  gboolean cond = FALSE;
   CURLMsg *curl_message;
-  gboolean run, exit_cond;
-  gint still_running, i, reason;
-  GstCurlHttpSrcQueueElement *queue_element;
 
-  GSTCURL_INFO_PRINT ("cURL multi handle loop task has started!");
+  context = (GstCurlHttpSrcMultiTaskContext *) thread_data;
 
-  g_mutex_lock (&GstCurlHttpSrcLoopReadyMutex);
+  g_mutex_lock (&context->mutex);
 
-  multi_handle = curl_multi_init ();
-
-  curl_multi_setopt (multi_handle, CURLMOPT_PIPELINING, 1);
-  curl_multi_setopt (multi_handle, CURLMOPT_MAX_HOST_CONNECTIONS, 1);
-
-  request_queue_mutex = g_new (GMutex, 1);
-  if (request_queue_mutex == NULL) {
-    GSTCURL_ERROR_PRINT ("Couldn't malloc request_queue_mutex!");
-    return;
+  /* Someone is holding a reference to us, but isn't using us so to avoid
+   * unnecessary clock cycle wasting, sit in a conditional wait until woken.
+   */
+  while (context->state == GSTCURL_MULTI_LOOP_STATE_WAIT) {
+    GSTCURL_DEBUG_PRINT ("Entering wait state...");
+    g_cond_wait (&context->signal, &context->mutex);
+    GSTCURL_DEBUG_PRINT ("Received wake up call!");
   }
-  g_mutex_init (request_queue_mutex);
-  request_queue = NULL;
 
-  curl_multi_loop_signal_mutex = g_new (GMutex, 1);
-  if (curl_multi_loop_signal_mutex == NULL) {
-    GSTCURL_ERROR_PRINT ("Couldn't malloc curl_multi_loop_signal_mutex!");
-    return;
-  }
-  g_mutex_init (curl_multi_loop_signal_mutex);
-  curl_multi_loop_signaller = g_new (GCond, 1);
-  if (curl_multi_loop_signaller == NULL) {
-    GSTCURL_ERROR_PRINT ("Couldn't malloc curl_multi_loop_signaller!");
-    return;
-  }
-  g_cond_init (curl_multi_loop_signaller);
-  curl_multi_loop_signal_state = GSTCURL_MULTI_LOOP_STATE_WAIT;
-
-  request_removal_mutex = g_new (GMutex, 1);
-  if (request_removal_mutex == NULL) {
-    GSTCURL_ERROR_PRINT ("Couldn't malloc request_removal_mutex!");
-    return;
-  }
-  g_mutex_init (request_removal_mutex);
-  request_removal_element = NULL;
-
-  run = TRUE;
-  still_running = 0;
-
-  g_cond_signal (&GstCurlHttpSrcLoopReadyCond);
-  g_mutex_unlock (&GstCurlHttpSrcLoopReadyMutex);
-
-  while (run == TRUE) {
-    g_mutex_lock (curl_multi_loop_signal_mutex);
-    while (curl_multi_loop_signal_state == GSTCURL_MULTI_LOOP_STATE_WAIT) {
-      GSTCURL_DEBUG_PRINT ("Entering wait state...");
-      g_cond_wait (curl_multi_loop_signaller, curl_multi_loop_signal_mutex);
-      GSTCURL_DEBUG_PRINT ("Received wake up call!");
+  if (context->state == GSTCURL_MULTI_LOOP_STATE_QUEUE_EVENT) {
+    GSTCURL_DEBUG_PRINT ("Received a new item on the queue!");
+    if (context->queue == NULL) {
+      GSTCURL_ERROR_PRINT ("Request Queue was empty on a Queue Event!");
+      context->state = GSTCURL_MULTI_LOOP_STATE_WAIT;
+      return;
     }
 
-    if (curl_multi_loop_signal_state == GSTCURL_MULTI_LOOP_STATE_QUEUE_EVENT) {
-      g_mutex_unlock (curl_multi_loop_signal_mutex);
-      g_mutex_lock (request_queue_mutex);
-      GSTCURL_DEBUG_PRINT ("Received a new item on the queue!");
-      if (request_queue == NULL) {
-        GSTCURL_ERROR_PRINT ("Request Queue was empty on a Queue Event!");
-        break;
+    /*
+     * Use the running mutex to lock access to each element, as the
+     * mutex's memory barriers stop cache optimisations from meaning
+     * flag values can't be trusted. The trylock will only let us in
+     * once and should fail immediately prior.
+     */
+    qelement = context->queue;
+    while(qelement != NULL) {
+      if (g_mutex_trylock(&qelement->running) == TRUE) {
+        GSTCURL_DEBUG_PRINT ("Adding easy handle for URI %s", qelement->p->uri);
+        cond = TRUE;
+        curl_multi_add_handle (context->multi_handle, qelement->p->curl_handle);
       }
-      i = 1;
-      queue_element = request_queue;
-      exit_cond = FALSE;
-
-      /*
-       * Use the running mutex to lock access to each element, as the
-       * mutex's memory barriers stop cache optimisations from meaning
-       * flag values can't be trusted. The trylock will only let us in
-       * once and should fail immediately prior.
-       */
-      while (queue_element != NULL) {
-        if(g_mutex_trylock(queue_element->running) == TRUE) {
-          GSTCURL_DEBUG_PRINT ("Adding easy handle for URI %s",
-                               queue_element->p->uri);
-          curl_multi_add_handle (multi_handle, queue_element->p->curl_handle);
-          GSTCURL_DEBUG_PRINT ("Curl easy handle for URI %s added",
-                               queue_element->p->uri);
-        }
-        queue_element = queue_element->next;
-      }
-
-      g_mutex_unlock (request_queue_mutex);
-      GSTCURL_DEBUG_PRINT ("Finished adding all handles, continuing.");
-      g_mutex_lock (curl_multi_loop_signal_mutex);
-      curl_multi_loop_signal_state = GSTCURL_MULTI_LOOP_STATE_RUNNING;
-      g_mutex_unlock (curl_multi_loop_signal_mutex);
+      qelement = qelement->next;
     }
-    else if (curl_multi_loop_signal_state == GSTCURL_MULTI_LOOP_STATE_RUNNING) {
-      g_mutex_unlock (curl_multi_loop_signal_mutex);
-      /* We have queue item(s), so poke curl with the do summat stick */
-      struct timeval timeout;
-      gint rc;
 
-      fd_set fdread;
-      fd_set fdwrite;
-      fd_set fdexcep;
-      int maxfd = -1;
-
-      long curl_timeo = -1;
-
-      FD_ZERO (&fdread);
-      FD_ZERO (&fdwrite);
-      FD_ZERO (&fdexcep);
-
-      /* set a suitable timeout to play around with */
-      timeout.tv_sec = 1;
-      timeout.tv_usec = 0;
-
-      curl_multi_timeout (multi_handle, &curl_timeo);
-      if (curl_timeo >= 0) {
-        timeout.tv_sec = curl_timeo / 1000;
-        if (timeout.tv_sec > 1) {
-          timeout.tv_sec = 1;
-        }
-        else {
-          timeout.tv_usec = (curl_timeo % 1000) * 1000;
-        }
-      }
-
-      /* get file descriptors from the transfers */
-      curl_multi_fdset (multi_handle, &fdread, &fdwrite, &fdexcep, &maxfd);
-
-      rc = select (maxfd + 1, &fdread, &fdwrite, &fdexcep, &timeout);
-
-      switch (rc) {
-        case -1:
-          /* select error */
-          break;
-        case 0:
-        default:
-          /* timeout or readable/writable sockets */
-          curl_multi_perform (multi_handle, &still_running);
-          break;
-      }
-
-      /*
-       * Check the CURL message buffer to find out if any transfers have
-       * completed. If they have, call the signal_finished function which
-       * will signal the g_cond_wait call in that calling instance.
-       */
-      exit_cond = FALSE;
-      i = 0;
-      while (exit_cond != TRUE) {
-        curl_message = curl_multi_info_read (multi_handle, &i);
-        if (curl_message == NULL) {
-          exit_cond = TRUE;
-        } else if (curl_message->msg == CURLMSG_DONE) {
-          if (gst_curl_http_src_signal_finished (curl_message->easy_handle,
-                  GSTCURL_RETURN_DONE) == FALSE) {
-            GSTCURL_WARNING_PRINT ("Couldn't signal to calling thread!");
-          }
-          /* A hack, but I have seen curl_message->easy_handle being
-           * NULL randomly, so check for that. */
-          if (curl_message->easy_handle == NULL) {
-            break;
-          }
-          curl_multi_remove_handle (multi_handle, curl_message->easy_handle);
-        }
-      }
-
-      if (still_running == 0) {
-        /* We've finished processing, so set the state to wait.
-         *
-         * This is a little more complex, as we need to catch the edge
-         * case of another thread adding a queue item while we've been
-         * working.
-         */
-        g_mutex_lock (curl_multi_loop_signal_mutex);
-        if ((curl_multi_loop_signal_state ==
-                GSTCURL_MULTI_LOOP_STATE_QUEUE_EVENT) ||
-            (curl_multi_loop_signal_state ==
-                GSTCURL_MULTI_LOOP_STATE_REQUEST_REMOVAL)) {
-          g_mutex_unlock (curl_multi_loop_signal_mutex);
-          continue;
-        }
-        else
-        {
-          curl_multi_loop_signal_state = GSTCURL_MULTI_LOOP_STATE_WAIT;
-        }
-        g_mutex_unlock (curl_multi_loop_signal_mutex);
-      }
-    }
-    else if (curl_multi_loop_signal_state == GSTCURL_MULTI_LOOP_STATE_STOP) {
-      g_mutex_unlock (curl_multi_loop_signal_mutex);
-      /* Something wants us to shut down, so set the run condition */
-      GSTCURL_INFO_PRINT ("Got instruction to shut down");
-      run = FALSE;
-      reason = GSTCURL_RETURN_PIPELINE_NULL;
-    }
-    else if (curl_multi_loop_signal_state ==
-	      GSTCURL_MULTI_LOOP_STATE_REQUEST_REMOVAL) {
-      g_mutex_unlock (curl_multi_loop_signal_mutex);
-      exit_cond = FALSE;
-      queue_element = request_queue;
-      while ((exit_cond != TRUE)) {
-        if (queue_element == NULL) {
-          break;
-        }
-        if (queue_element->p == request_removal_element) {
-          curl_multi_remove_handle (multi_handle,
-              request_removal_element->curl_handle);
-          gst_curl_http_src_signal_finished (request_removal_element->
-              curl_handle, GSTCURL_RETURN_PIPELINE_NULL);
-          exit_cond = TRUE;
-        }
-        queue_element = queue_element->next;
-      }
-      request_removal_element = NULL;
-      g_mutex_unlock (request_removal_mutex);
+    if(cond != TRUE) {
+      GSTCURL_WARNING_PRINT ("All curl handles already added for QUEUE_EVENT!");
     }
     else {
-      GSTCURL_WARNING_PRINT ("Curl Loop State was invalid or unsupported");
-      GSTCURL_WARNING_PRINT ("Signal State is %d, resetting to RUNNING.",
-          curl_multi_loop_signal_state);
-      /* Reset to running, so if there isn't anything to do it'll be
-       * changed the WAIT once curl_multi_perform says it has no active
-       * handles. */
-      curl_multi_loop_signal_state = GSTCURL_MULTI_LOOP_STATE_RUNNING;
-      g_mutex_unlock (curl_multi_loop_signal_mutex);
+      GSTCURL_DEBUG_PRINT ("Finished adding all handles, continuing.");
+      context->state = GSTCURL_MULTI_LOOP_STATE_RUNNING;
+    }
+    g_mutex_unlock(&context->mutex);
+  }
+  else if (context->state == GSTCURL_MULTI_LOOP_STATE_RUNNING) {
+    struct timeval timeout;
+    gint rc;
+    fd_set fdread, fdwrite, fdexcep;
+    int maxfd = -1;
+    long curl_timeo = -1;
+
+    /* Because curl can possibly take some time here, be nice and let go of the
+     * mutex so other threads can perform state/queue operations as we don't
+     * care about those until the end of this. */
+    g_mutex_unlock(&context->mutex);
+
+    FD_ZERO (&fdread);
+    FD_ZERO (&fdwrite);
+    FD_ZERO (&fdexcep);
+
+    timeout.tv_sec = 1;
+    timeout.tv_usec = 0;
+
+    curl_multi_timeout (context->multi_handle, &curl_timeo);
+    if (curl_timeo >= 0) {
+    timeout.tv_sec = curl_timeo / 1000;
+      if (timeout.tv_sec > 1) {
+        timeout.tv_sec = 1;
+      }
+      else {
+        timeout.tv_usec = (curl_timeo % 1000) * 1000;
+      }
+    }
+
+    /* get file descriptors from the transfers */
+    curl_multi_fdset (context->multi_handle, &fdread, &fdwrite, &fdexcep, &maxfd);
+
+    rc = select (maxfd + 1, &fdread, &fdwrite, &fdexcep, &timeout);
+
+    switch (rc) {
+    case -1:
+      /* select error */
+      break;
+    case 0:
+    default:
+      /* timeout or readable/writable sockets */
+      curl_multi_perform (context->multi_handle, &still_running);
+      break;
+    }
+
+    /*
+     * Check the CURL message buffer to find out if any transfers have
+     * completed. If they have, call the signal_finished function which
+     * will signal the g_cond_wait call in that calling instance.
+     */
+    i = 0;
+    while (cond != TRUE) {
+      curl_message = curl_multi_info_read (context->multi_handle, &i);
+      if (curl_message == NULL) {
+        cond = TRUE;
+      }
+      else if (curl_message->msg == CURLMSG_DONE) {
+        /* A hack, but I have seen curl_message->easy_handle being
+         * NULL randomly, so check for that. */
+	g_mutex_lock(&context->mutex);
+        if (curl_message->easy_handle == NULL) {
+          break;
+        }
+        curl_multi_remove_handle (context->multi_handle,
+                                  curl_message->easy_handle);
+        gst_curl_http_src_remove_queue_handle(&context->queue,
+                                            curl_message->easy_handle);
+        g_mutex_unlock(&context->mutex);
+      }
+    }
+
+    if (still_running == 0) {
+      /* We've finished processing, so set the state to wait.
+       *
+       * This is a little more complex, as we need to catch the edge
+       * case of another thread adding a queue item while we've been
+       * working.
+       */
+      g_mutex_lock (&context->mutex);
+      if ((context->state != GSTCURL_MULTI_LOOP_STATE_QUEUE_EVENT) &&
+          (context->state != GSTCURL_MULTI_LOOP_STATE_REQUEST_REMOVAL)) {
+        context->state = GSTCURL_MULTI_LOOP_STATE_WAIT;
+      }
+      g_mutex_unlock (&context->mutex);
     }
   }
-  /*
-   * We must deal with a possibility of the above bombing out when curl still
-   * has handles running. This can be if a new queue element arrived and was
-   * NULL, which simply cannot happen. Use the signal functionality to call
-   * back to connected clients to tell them that there was a failure so they
-   * can return GST_FLOW_ERROR to signal the pipeline that something horrible
-   * has happened.
-   *
-   * Alternatively, the thread could've been given the STATE_STOP signal in
-   * which case we've been asked to shut everything down.
-   */
-  if (request_queue != NULL) {
-    gst_curl_http_src_recurse_queue_cleanup (request_queue, reason);
+  /* Is the following even necessary any more...? */
+  else if (context->state == GSTCURL_MULTI_LOOP_STATE_STOP) {
+    g_mutex_unlock (&context->mutex);
+    /* Something wants us to shut down, so best to do a full cleanup as it
+     * might be that something's gone bang.
+     */
+    /*gst_curl_http_src_unref_multi (NULL, GSTCURL_RETURN_PIPELINE_NULL, TRUE);*/
+    GSTCURL_INFO_PRINT ("Got instruction to shut down");
   }
-
-  /*
-   * No leaks here!
-   */
-  g_mutex_clear (request_queue_mutex);
-  g_mutex_clear (curl_multi_loop_signal_mutex);
-  g_mutex_clear (request_removal_mutex);
-  g_cond_clear (curl_multi_loop_signaller);
-
-  g_free (request_queue_mutex);
-  g_free (curl_multi_loop_signal_mutex);
-  g_free (request_removal_mutex);
-  g_free (curl_multi_loop_signaller);
+  else if (context->state == GSTCURL_MULTI_LOOP_STATE_REQUEST_REMOVAL) {
+    qelement = context->queue;
+    while (qelement != NULL) {
+      if (qelement->p == context->request_removal_element) {
+        curl_multi_remove_handle(context->multi_handle,
+                                 context->request_removal_element->curl_handle);
+        qelement->p->result = GSTCURL_RETURN_REMOVED;
+        g_cond_signal(qelement->p->finished);
+        gst_curl_http_src_remove_queue_item (&context->queue, qelement->p);
+      }
+    }
+    context->request_removal_element = NULL;
+    g_mutex_unlock (&context->mutex);
+  }
+  else {
+    GSTCURL_WARNING_PRINT ("Curl Loop State was invalid or unsupported");
+    GSTCURL_WARNING_PRINT ("Signal State is %d, resetting to RUNNING.",
+                           context->state);
+    /* Reset to running, so if there isn't anything to do it'll be
+     * changed the WAIT once curl_multi_perform says it has no active
+     * handles. */
+    context->state = GSTCURL_MULTI_LOOP_STATE_RUNNING;
+    g_mutex_unlock (&context->mutex);
+  }
 }
 
 /*
@@ -1545,76 +1488,18 @@ gst_curl_http_src_get_chunks (void *chunk, size_t size, size_t nmemb,
   return size * nmemb;
 }
 
-static gboolean
-gst_curl_http_src_signal_finished (CURL * handle, gint reason)
-{
-  gboolean ret, exit_cond = FALSE;
-  GstCurlHttpSrcQueueElement *prev, *curr;
-  /*
-   * Find the particular cURL instance that has just finished, signal the
-   * calling thread and then remove it from the list.
-   */
-  prev = NULL;
-  curr = request_queue;
-  while (exit_cond != TRUE) {
-    if (curr->p->curl_handle == handle) {
-      curr->p->result = reason;
-      g_mutex_unlock (curr->running);
-      g_free (curr->running);
-      g_cond_signal (curr->p->finished);
-      /*g_mutex_unlock(curr->p->mutex); */
-      if (prev == NULL) {
-        request_queue = curr->next;
-      }
-      else {
-        prev->next = curr->next;
-        g_free (curr);
-        curr = NULL;
-      }
-      exit_cond = TRUE;
-      ret = TRUE;
-    }
-    else if (curr->next == NULL) {
-      /*
-       * Reached the end of the queue without finding the element, return
-       * a failure.
-       */
-      exit_cond = TRUE;
-      ret = FALSE;
-    }
-    else {
-      prev = curr;
-      curr = curr->next;
-    }
-  }
-  return ret;
-}
-
-static void
-gst_curl_http_src_recurse_queue_cleanup (GstCurlHttpSrcQueueElement * element,
-    gint reason)
-{
-  if (element->next != NULL) {
-    gst_curl_http_src_recurse_queue_cleanup (element->next, reason);
-  }
-  /* Signal the calling thread, which should clean up the GstCurlHttpSrc */
-  element->p->result = reason;
-  g_cond_signal (element->p->finished);
-  g_mutex_unlock (element->p->mutex);
-  g_free (element);
-  element = NULL;
-}
-
 static void
 gst_curl_http_src_request_remove (GstCurlHttpSrc * src)
 {
-  g_mutex_lock (request_removal_mutex);
-  g_mutex_lock (curl_multi_loop_signal_mutex);
+  GstCurlHttpSrcClass *klass = G_TYPE_INSTANCE_GET_CLASS (src,
+                                                        GST_TYPE_CURL_HTTP_SRC,
+                                                        GstCurlHttpSrcClass);
+  g_mutex_lock (&klass->multi_task_context.mutex);
 
-  curl_multi_loop_signal_state = GSTCURL_MULTI_LOOP_STATE_REQUEST_REMOVAL;
-  request_removal_element = src;
-  g_cond_signal (curl_multi_loop_signaller);
-  g_mutex_unlock (curl_multi_loop_signal_mutex);
+  klass->multi_task_context.state = GSTCURL_MULTI_LOOP_STATE_REQUEST_REMOVAL;
+  klass->multi_task_context.request_removal_element = src;
+  g_cond_signal (&klass->multi_task_context.signal);
+  g_mutex_unlock (&klass->multi_task_context.mutex);
   /* The following should be unlocked by the thread... */
   /*g_mutex_unlock(request_removal_mutex); */
 }

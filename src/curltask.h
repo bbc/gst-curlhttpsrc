@@ -49,8 +49,6 @@
 #include <curl/curl.h>
 #include "gstcurldefaults.h"
 
-GST_DEBUG_CATEGORY_STATIC (gst_curl_loop_debug);
-
 #define GSTCURL_ERROR_PRINT(...) GST_CAT_ERROR (gst_curl_loop_debug, __VA_ARGS__)
 #define GSTCURL_WARNING_PRINT(...) GST_CAT_WARNING (gst_curl_loop_debug, __VA_ARGS__)
 #define GSTCURL_INFO_PRINT(...) GST_CAT_INFO (gst_curl_loop_debug, __VA_ARGS__)
