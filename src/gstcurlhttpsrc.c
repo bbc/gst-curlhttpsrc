@@ -341,7 +341,7 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
   g_cond_init(&klass->multi_task_context.signal);
   g_rec_mutex_init(&klass->multi_task_context.task_rec_mutex);
 
-  gst_element_class_set_details_simple (gstelement_class,
+  gst_element_class_set_static_metadata (gstelement_class,
       "HTTP Client Source using libcURL",
       "Source/Network",
       "Receiver data as a client over a network via HTTP using cURL",
