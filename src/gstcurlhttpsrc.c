@@ -1020,6 +1020,7 @@ gst_curl_http_src_handle_response (GstCurlHttpSrc * src, GstBuffer ** buf)
     *buf = gst_buffer_new_allocate (NULL, src->len, NULL);
     gst_buffer_map (*buf, &info, GST_MAP_READWRITE);
     memcpy (info.data, src->msg, (size_t) src->len);
+    gst_buffer_unmap (*buf, &info);
   }
 
   GSTCURL_FUNCTION_EXIT (src);
