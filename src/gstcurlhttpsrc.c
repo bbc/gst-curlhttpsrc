@@ -134,9 +134,9 @@ static CURL *gst_curl_http_src_create_easy_handle (GstCurlHttpSrc * s);
 static gboolean gst_curl_http_src_make_request (GstCurlHttpSrc * s);
 static inline void gst_curl_http_src_destroy_easy_handle (GstCurlHttpSrc * src);
 static size_t gst_curl_http_src_get_header (void *header, size_t size,
-    size_t nmemb, GstCurlHttpSrc * s);
+    size_t nmemb, void * src);
 static size_t gst_curl_http_src_get_chunks (void *chunk, size_t size,
-    size_t nmemb, GstCurlHttpSrc * s);
+    size_t nmemb, void * src);
 static void gst_curl_http_src_request_remove (GstCurlHttpSrc * src);
 static char *gst_curl_http_src_strcasestr (const char *haystack,
     const char *needle);
@@ -1399,8 +1399,9 @@ gst_curl_http_src_curl_multi_loop (gpointer thread_data)
  */
 static size_t
 gst_curl_http_src_get_header (void *header, size_t size, size_t nmemb,
-    GstCurlHttpSrc * s)
+    void * src)
 {
+  GstCurlHttpSrc *s = src;
   char *substr;
   int i, len;
   /*
@@ -1481,8 +1482,9 @@ gst_curl_http_src_strcasestr (const char *haystack, const char *needle)
  */
 static size_t
 gst_curl_http_src_get_chunks (void *chunk, size_t size, size_t nmemb,
-    GstCurlHttpSrc * s)
+    void * src)
 {
+  GstCurlHttpSrc * s = src;
   size_t new_len = s->len + size * nmemb;
   GST_TRACE_OBJECT (s,
       "Received curl chunk for URI %s of size %d, new total size %d", s->uri,
