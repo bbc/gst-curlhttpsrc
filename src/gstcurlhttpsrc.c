@@ -929,24 +929,25 @@ static GstFlowReturn
 gst_curl_http_src_handle_response (GstCurlHttpSrc * src, GstBuffer ** buf)
 {
   GstFlowReturn ret = GST_FLOW_OK;
+  glong curl_info_long;
+  gdouble curl_info_dbl;
   GstMapInfo info;
-  glong curl_info;
   GSTCURL_FUNCTION_ENTRY (src);
 
   /* Get back the return code for the session */
   if (curl_easy_getinfo (src->curl_handle, CURLINFO_RESPONSE_CODE,
-          &curl_info) != CURLE_OK) {
+          &curl_info_long) != CURLE_OK) {
     /* Curl cannot be relied on in this state, so return an error. */
     return GST_FLOW_ERROR;
   }
 
-  if (GSTCURL_INFO_RESPONSE (curl_info) ||
-      GSTCURL_SUCCESS_RESPONSE (curl_info)) {
+  if (GSTCURL_INFO_RESPONSE (curl_info_long) ||
+      GSTCURL_SUCCESS_RESPONSE (curl_info_long)) {
     /* Everything should be fine. */
     GST_INFO_OBJECT (src, "Get for URI %s succeeded, response code %ld",
-        src->uri, curl_info);
+        src->uri, curl_info_long);
   }
-  else if (GSTCURL_REDIRECT_RESPONSE (curl_info)) {
+  else if (GSTCURL_REDIRECT_RESPONSE (curl_info_long)) {
     /* Some redirection response. souphttpsrc reports errors here, so I'm
      * going to do the same. I should only see these if:
      *  > Curl has been configured not to follow redirects
@@ -957,24 +958,24 @@ gst_curl_http_src_handle_response (GstCurlHttpSrc * src, GstBuffer ** buf)
      * flow error.
      */
     GST_WARNING_OBJECT (src, "Get for URI %s received redirection code %ld",
-        src->uri, curl_info);
+        src->uri, curl_info_long);
     ret = GST_FLOW_ERROR;
     /* Redirection limit has been exceeded, don't retry as we will only retry
      * from original URI.
      */
     src->retries_remaining = 0;
   }
-  else if (GSTCURL_CLIENT_ERR_RESPONSE (curl_info)) {
+  else if (GSTCURL_CLIENT_ERR_RESPONSE (curl_info_long)) {
     GST_ERROR_OBJECT (src, "Get for URI %s received client error code %ld",
-        src->uri, curl_info);
+        src->uri, curl_info_long);
     ret = GST_FLOW_ERROR;
     /* For client error, any retry with the same request is more than likely
      * going to fail. */
     src->retries_remaining = 0;
   }
-  else if (GSTCURL_SERVER_ERR_RESPONSE (curl_info)) {
+  else if (GSTCURL_SERVER_ERR_RESPONSE (curl_info_long)) {
     GST_ERROR_OBJECT (src, "Get for URI %s received server error code %ld",
-        src->uri, curl_info);
+        src->uri, curl_info_long);
     ret = GST_FLOW_ERROR;
     /* Server isn't working, so again retries are best avoided. */
     src->retries_remaining = 0;
@@ -986,29 +987,29 @@ gst_curl_http_src_handle_response (GstCurlHttpSrc * src, GstBuffer ** buf)
      * > 0. Alternatively, this could be for an SSL-related error,
      */
     if (curl_easy_getinfo (src->curl_handle, CURLINFO_TOTAL_TIME,
-                           &curl_info) != CURLE_OK) {
+                           &curl_info_dbl) != CURLE_OK) {
       /* Curl cannot be relied on in this state, so return an error. */
       return GST_FLOW_ERROR;
     }
 
-    if (curl_info > src->timeout_secs) {
+    if (curl_info_dbl > src->timeout_secs) {
       GST_ERROR_OBJECT (src, "Request for URI %s timed out after %d seconds.",
                         src->uri, src->timeout_secs);
     }
 
     if (curl_easy_getinfo (src->curl_handle, CURLINFO_OS_ERRNO,
-                           &curl_info) != CURLE_OK) {
+                           &curl_info_long) != CURLE_OK) {
       /* Curl cannot be relied on in this state, so return an error. */
       return GST_FLOW_ERROR;
     }
 
-    GST_WARNING_OBJECT (src, "Errno for CONNECT call was %ld (%s)", curl_info,
-                        g_strerror((gint) curl_info));
+    GST_WARNING_OBJECT (src, "Errno for CONNECT call was %ld (%s)", curl_info_long,
+                        g_strerror((gint) curl_info_long));
 
     /* Some of these responses are retry-able, others not. Set the returned
      * state to ERROR so we crash out instead of fruitlessly attempting.
      */
-    if (curl_info == ECONNREFUSED) {
+    if (curl_info_long == ECONNREFUSED) {
 	ret = GST_FLOW_ERROR;
     }
     else {
