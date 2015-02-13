@@ -671,9 +671,9 @@ gst_curl_http_src_unref_multi (GstCurlHttpSrc *src)
                                      GstCurlHttpSrcClass);
 
   g_mutex_lock(&klass->multi_task_context.mutex);
-
+  klass->multi_task_context.refcount--;
   GST_INFO_OBJECT (src, "Closing instance, worker thread refcount is now %u",
-                   --klass->multi_task_context.refcount);
+                   klass->multi_task_context.refcount);
 
   if(klass->multi_task_context.refcount <= 0) {
     /* Everything's done! Clean up. */
