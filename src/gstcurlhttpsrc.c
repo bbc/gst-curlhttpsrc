@@ -599,11 +599,6 @@ gst_curl_http_src_init (GstCurlHttpSrc * source)
   source->uri_mutex = g_new (GMutex, 1);
   g_mutex_init (source->uri_mutex);
 
-  /*
-   * Check that the CURL worker thread is running. If it isn't, start it.
-   */
-  gst_curl_http_src_ref_multi(source);
-
   GSTCURL_FUNCTION_EXIT (source);
 }
 
@@ -701,9 +696,6 @@ gst_curl_http_src_finalize (GObject *obj)
   GstCurlHttpSrc *src = GST_CURLHTTPSRC (obj);
 
   GSTCURL_FUNCTION_ENTRY (src);
-
-  /* Unref the curl_multi task. If nothing else holds a reference, stop it. */
-  gst_curl_http_src_unref_multi (src);
 
   /* Cleanup all memory allocated */
   gst_curl_http_src_cleanup_instance (src);
@@ -1082,9 +1074,13 @@ gst_curl_http_src_change_state (GstElement * element, GstStateChange transition)
   GSTCURL_FUNCTION_ENTRY (source);
 
   switch (transition) {
+    case GST_STATE_CHANGE_NULL_TO_READY:
+      gst_curl_http_src_ref_multi(source);
+      break;
     case GST_STATE_CHANGE_READY_TO_NULL:
       /* The pipeline has ended, so signal any running request to end. */
       gst_curl_http_src_request_remove (source);
+      gst_curl_http_src_unref_multi(source);
       break;
     default:
       break;
