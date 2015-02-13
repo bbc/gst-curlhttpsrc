@@ -596,7 +596,7 @@ gst_curl_http_src_init (GstCurlHttpSrc * source)
 
   source->finished = g_new (GCond, 1);
   g_cond_init (source->finished);
-  source->uri_mutex = g_new (GMutex, 1);;
+  source->uri_mutex = g_new (GMutex, 1);
   g_mutex_init (source->uri_mutex);
 
   /*
