@@ -155,6 +155,7 @@ struct _GstCurlHttpSrc
    */
   /* Type         Name                                      Curl Option */
   gchar *uri;                   /* CURLOPT_URL */
+  gchar *redirect_uri;		/* CURLINFO_REDIRECT_URL */
   gchar *username;              /* CURLOPT_USERNAME */
   gchar *password;              /* CURLOPT_PASSWORD */
   gchar *proxy_uri;             /* CURLOPT_PROXY */

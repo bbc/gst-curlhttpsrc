@@ -117,6 +117,7 @@ static gboolean gst_curl_http_src_negotiate_caps (GstCurlHttpSrc * src);
 static GstStateChangeReturn gst_curl_http_src_change_state (GstElement *
     element, GstStateChange transition);
 static void gst_curl_http_src_cleanup_instance(GstCurlHttpSrc *src);
+static gboolean gst_curl_http_src_query (GstBaseSrc * bsrc, GstQuery * query);
 
 /* URI Handler functions */
 static void gst_curl_http_src_uri_handler_init (gpointer g_iface,
@@ -151,11 +152,13 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
 {
   GObjectClass *gobject_class;
   GstElementClass *gstelement_class;
+  GstBaseSrcClass *gstbasesrc_class;
   GstPushSrcClass *gstpushsrc_class;
   const gchar *http_env;
 
   gobject_class = (GObjectClass *) klass;
   gstelement_class = (GstElementClass *) klass;
+  gstbasesrc_class = (GstBaseSrcClass *) klass;
   gstpushsrc_class = (GstPushSrcClass *) klass;
 
   GST_INFO_OBJECT (klass, "class_init started!");
@@ -163,6 +166,7 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
   gstelement_class->change_state =
       GST_DEBUG_FUNCPTR (gst_curl_http_src_change_state);
   gstpushsrc_class->create = GST_DEBUG_FUNCPTR (gst_curl_http_src_create);
+  gstbasesrc_class->query = GST_DEBUG_FUNCPTR (gst_curl_http_src_query);
 
   gst_element_class_add_pad_template (gstelement_class,
       gst_static_pad_template_get (&srcpadtemplate));
@@ -568,6 +572,7 @@ gst_curl_http_src_init (GstCurlHttpSrc * source)
 
   /* Assume everything is already free'd */
   source->uri = NULL;
+  source->redirect_uri = NULL;
   source->username = GSTCURL_HANDLE_DEFAULT_CURLOPT_USERNAME;
   source->password = GSTCURL_HANDLE_DEFAULT_CURLOPT_PASSWORD;
   source->proxy_uri = NULL;
@@ -923,7 +928,9 @@ gst_curl_http_src_handle_response (GstCurlHttpSrc * src, GstBuffer ** buf)
   GstFlowReturn ret = GST_FLOW_OK;
   glong curl_info_long;
   gdouble curl_info_dbl;
+  gchar *redirect_url;
   GstMapInfo info;
+  size_t lena,lenb;
   GSTCURL_FUNCTION_ENTRY (src);
 
   /* Get back the return code for the session */
@@ -951,6 +958,19 @@ gst_curl_http_src_handle_response (GstCurlHttpSrc * src, GstBuffer ** buf)
      */
     GST_WARNING_OBJECT (src, "Get for URI %s received redirection code %ld",
         src->uri, curl_info_long);
+    /* Curl may have set the requested redirection URI that it was otherwise
+     * barred from following, so set this just in case the sink element wants
+     * to try again itself.
+     */
+    if (curl_easy_getinfo (src->curl_handle, CURLINFO_REDIRECT_URL,
+                           &redirect_url) == CURLE_OK) {
+      if(redirect_url != NULL) {
+        GST_INFO_OBJECT(src, "Got a redirect to %s, setting as redirect URI",
+                        src->redirect_uri);
+        src->redirect_uri = g_strdup(redirect_url);
+      }
+    }
+
     ret = GST_FLOW_ERROR;
     /* Redirection limit has been exceeded, don't retry as we will only retry
      * from original URI.
@@ -1021,6 +1041,27 @@ gst_curl_http_src_handle_response (GstCurlHttpSrc * src, GstBuffer ** buf)
     gst_buffer_map (*buf, &info, GST_MAP_READWRITE);
     memcpy (info.data, src->msg, (size_t) src->len);
     gst_buffer_unmap (*buf, &info);
+  }
+
+  /*
+   * Check for any redirection that happened. If the result of
+   * CURLINFO_EFFECTIVE_URL is NULL, then the originally supplied URL was used
+   * to retrieve the content. Otherwise, a redirected URL was used, and this
+   * must be reused as part of our base URL from now on.
+   *
+   * TODO: At present, there is no easy way in curl to differentiate a
+   * temporary redirect from a permanent one.
+   */
+  if(curl_easy_getinfo(src->curl_handle, CURLINFO_EFFECTIVE_URL, &redirect_url)
+                       == CURLE_OK) {
+    lena = strlen(src->uri);
+    lenb = strlen(redirect_url);
+    if(g_ascii_strncasecmp(src->uri, redirect_url, (lena>lenb)?lenb:lena) != 0)
+    {
+      GST_INFO_OBJECT(src, "Got a redirect to %s, setting as redirect URI",
+                      redirect_url);
+      src->redirect_uri = g_strdup(redirect_url);
+    }
   }
 
   GSTCURL_FUNCTION_EXIT (src);
@@ -1104,6 +1145,8 @@ gst_curl_http_src_cleanup_instance(GstCurlHttpSrc *src)
   g_mutex_lock(src->uri_mutex);
   g_free(src->uri);
   src->uri = NULL;
+  g_free(src->redirect_uri);
+  src->redirect_uri = NULL;
   g_mutex_unlock(src->uri_mutex);
   g_mutex_clear(src->uri_mutex);
   g_free(src->uri_mutex);
@@ -1136,6 +1179,30 @@ gst_curl_http_src_cleanup_instance(GstCurlHttpSrc *src)
   src->msg = NULL;
   g_free(src->headers.content_type);
   src->headers.content_type = NULL;
+}
+
+static gboolean
+gst_curl_http_src_query (GstBaseSrc * bsrc, GstQuery * query)
+{
+  GstCurlHttpSrc *src = GST_CURLHTTPSRC (bsrc);
+  gboolean ret;
+  GSTCURL_FUNCTION_ENTRY(src);
+
+  switch (GST_QUERY_TYPE (query)) {
+    case GST_QUERY_URI:
+      gst_query_set_uri (query, src->uri);
+      if (src->redirect_uri != NULL) {
+        gst_query_set_uri_redirection (query, src->redirect_uri);
+      }
+      ret = TRUE;
+      break;
+    default:
+      ret = FALSE;
+      break;
+  }
+
+  GSTCURL_FUNCTION_EXIT(src);
+  return ret;
 }
 
 static void
