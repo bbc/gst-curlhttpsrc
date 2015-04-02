@@ -411,7 +411,11 @@ gst_curl_http_src_set_property (GObject * object, guint prop_id,
     case PROP_HEADERS:
       g_strfreev (source->extra_headers);
       source->extra_headers = g_strdupv (g_value_get_boxed (value));
-      source->number_headers = g_strv_length (source->extra_headers);
+      if (source->extra_headers != NULL) {
+        source->number_headers = g_strv_length (source->extra_headers);
+      } else {
+        source->number_headers = 0;
+      }
       break;
     case PROP_COMPRESS:
       source->accept_compressed_encodings = g_value_get_boolean (value);
