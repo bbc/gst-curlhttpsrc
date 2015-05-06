@@ -637,8 +637,10 @@ gst_curl_http_src_ref_multi (GstCurlHttpSrc *src) {
 
     curl_multi_setopt (klass->multi_task_context.multi_handle,
                        CURLMOPT_PIPELINING, 1);
+#ifdef CURLMOPT_MAX_HOST_CONNECTIONS
     curl_multi_setopt (klass->multi_task_context.multi_handle,
                        CURLMOPT_MAX_HOST_CONNECTIONS, 1);
+#endif
 
     /* Start the thread */
     klass->multi_task_context.task = gst_task_new (
