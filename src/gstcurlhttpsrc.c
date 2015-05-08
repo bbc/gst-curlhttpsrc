@@ -118,6 +118,8 @@ static GstStateChangeReturn gst_curl_http_src_change_state (GstElement *
     element, GstStateChange transition);
 static void gst_curl_http_src_cleanup_instance(GstCurlHttpSrc *src);
 static gboolean gst_curl_http_src_query (GstBaseSrc * bsrc, GstQuery * query);
+static gboolean gst_curl_http_src_get_content_length (GstBaseSrc * bsrc,
+    guint64 * size);
 
 /* URI Handler functions */
 static void gst_curl_http_src_uri_handler_init (gpointer g_iface,
@@ -167,6 +169,8 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
       GST_DEBUG_FUNCPTR (gst_curl_http_src_change_state);
   gstpushsrc_class->create = GST_DEBUG_FUNCPTR (gst_curl_http_src_create);
   gstbasesrc_class->query = GST_DEBUG_FUNCPTR (gst_curl_http_src_query);
+  gstbasesrc_class->get_size =
+      GST_DEBUG_FUNCPTR (gst_curl_http_src_get_content_length);
 
   gst_element_class_add_pad_template (gstelement_class,
       gst_static_pad_template_get (&srcpadtemplate));
@@ -937,6 +941,7 @@ gst_curl_http_src_handle_response (GstCurlHttpSrc * src, GstBuffer ** buf)
   gchar *redirect_url;
   GstMapInfo info;
   size_t lena,lenb;
+  GstBaseSrc *basesrc;
   GSTCURL_FUNCTION_ENTRY (src);
 
   /* Get back the return code for the session */
@@ -1067,6 +1072,26 @@ gst_curl_http_src_handle_response (GstCurlHttpSrc * src, GstBuffer ** buf)
       GST_INFO_OBJECT(src, "Got a redirect to %s, setting as redirect URI",
                       redirect_url);
       src->redirect_uri = g_strdup(redirect_url);
+    }
+  }
+
+  /*
+   * Get the Content-Length to tell upstream elements the "duration" of this
+   * downloaded item.
+   */
+  if(curl_easy_getinfo(src->curl_handle, CURLINFO_CONTENT_LENGTH_DOWNLOAD,
+                       &curl_info_dbl) == CURLE_OK) {
+    if (curl_info_dbl == -1) {
+      GST_WARNING_OBJECT(src,
+                         "No Content-Length was specified in the response.");
+    }
+    else {
+      GST_INFO_OBJECT(src, "Content-Length was given as %.0f", curl_info_dbl);
+      basesrc = GST_BASE_SRC_CAST (src);
+      basesrc->segment.duration = curl_info_dbl;
+      src->content_length = (guint64) curl_info_dbl;
+      gst_element_post_message (GST_ELEMENT (src),
+                          gst_message_new_duration_changed (GST_OBJECT (src)));
     }
   }
 
@@ -1203,12 +1228,29 @@ gst_curl_http_src_query (GstBaseSrc * bsrc, GstQuery * query)
       ret = TRUE;
       break;
     default:
-      ret = FALSE;
+      ret = GST_BASE_SRC_CLASS (parent_class)->query (bsrc, query);
       break;
   }
 
   GSTCURL_FUNCTION_EXIT(src);
   return ret;
+}
+
+static gboolean
+gst_curl_http_src_get_content_length (GstBaseSrc * bsrc, guint64 * size)
+{
+  GstCurlHttpSrc *src = GST_CURLHTTPSRC (bsrc);
+
+  if (src->content_length > 0) {
+    *size = src->content_length;
+    GST_DEBUG_OBJECT (src,
+                      "Returning content length size of %" G_GUINT64_FORMAT,
+                      *size);
+    return TRUE;
+  }
+  GST_DEBUG_OBJECT (src,
+                  "No content length has yet been set, or there was an error!");
+  return FALSE;
 }
 
 static void

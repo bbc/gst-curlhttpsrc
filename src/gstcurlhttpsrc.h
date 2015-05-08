@@ -221,6 +221,7 @@ struct _GstCurlHttpSrc
    */
   gchar *msg;
   guint len;
+  guint64 content_length;
   struct
   {
     gchar *content_type;
