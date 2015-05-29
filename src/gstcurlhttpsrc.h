@@ -167,8 +167,7 @@ struct _GstCurlHttpSrc
   gchar **cookies;              /* CURLOPT_COOKIELIST */
   gint number_cookies;
   gchar *user_agent;            /* CURLOPT_USERAGENT */
-  gchar **extra_headers;        /* CURLOPT_HTTPHEADER */
-  gint number_headers;
+  GstStructure *extra_headers;  /* CURLOPT_HTTPHEADER */
   struct curl_slist *slist;
   gboolean accept_compressed_encodings; /* CURLOPT_ACCEPT_ENCODING */
 

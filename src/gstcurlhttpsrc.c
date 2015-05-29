@@ -269,7 +269,7 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
   g_object_class_install_property (gobject_class, PROP_HEADERS,
       g_param_spec_boxed ("extra-headers", "Extra Headers",
           "Extra headers to append to the HTTP request",
-          G_TYPE_STRV, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+          GST_TYPE_STRUCTURE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_STRICT_SSL,
       g_param_spec_boolean ("ssl-strict", "SSL Strict",
@@ -413,12 +413,11 @@ gst_curl_http_src_set_property (GObject * object, guint prop_id,
       source->user_agent = g_value_dup_string (value);
       break;
     case PROP_HEADERS:
-      g_strfreev (source->extra_headers);
-      source->extra_headers = g_strdupv (g_value_get_boxed (value));
-      if (source->extra_headers != NULL) {
-        source->number_headers = g_strv_length (source->extra_headers);
-      } else {
-        source->number_headers = 0;
+      {
+        const GstStructure *s = gst_value_get_structure (value);
+        if (source->extra_headers)
+          gst_structure_free (source->extra_headers);
+        source->extra_headers = s ? gst_structure_copy (s) : NULL;
       }
       break;
     case PROP_COMPRESS:
@@ -511,7 +510,7 @@ gst_curl_http_src_get_property (GObject * object, guint prop_id,
       g_value_set_string (value, source->user_agent);
       break;
     case PROP_HEADERS:
-      g_value_set_boxed (value, source->extra_headers);
+      gst_value_set_structure (value, source->extra_headers);
       break;
     case PROP_COMPRESS:
       g_value_set_boolean (value, source->accept_compressed_encodings);
@@ -590,7 +589,6 @@ gst_curl_http_src_init (GstCurlHttpSrc * source)
   source->user_agent = GSTCURL_HANDLE_DEFAULT_CURLOPT_USERAGENT;
   source->number_cookies = 0;
   source->extra_headers = NULL;
-  source->number_headers = 0;
   source->end_of_message = FALSE;
   source->allow_3xx_redirect = GSTCURL_HANDLE_DEFAULT_CURLOPT_FOLLOWLOCATION;
   source->max_3xx_redirects = GSTCURL_HANDLE_DEFAULT_CURLOPT_MAXREDIRS;
@@ -770,6 +768,22 @@ gst_curl_http_src_create (GstPushSrc * psrc, GstBuffer ** outbuf)
   return ret;
 }
 
+static gboolean
+_headers_to_curl_slist (GQuark field_id, const GValue *value, gpointer ptr)
+{
+  gchar *field;
+  struct curl_slist **p_slist = ptr;
+
+  field = g_strdup_printf ("%s: %s", g_quark_to_string (field_id),
+      g_value_get_string (value));
+
+  *p_slist = curl_slist_append (*p_slist, field);
+
+  g_free (field);
+
+  return TRUE;
+}
+
 /*
  * From the data in the queue element s, create a CURL easy handle and populate
  * options with the URL, proxy data, login options, cookies,
@@ -804,9 +818,7 @@ gst_curl_http_src_create_easy_handle (GstCurlHttpSrc * s)
   }
 
   /* curl_slist_append dynamically allocates memory, but I need to free it */
-  for (i = 0; i < s->number_headers; i++) {
-    s->slist = curl_slist_append(s->slist, s->extra_headers[i]);
-  }
+  gst_structure_foreach (s->extra_headers, _headers_to_curl_slist, &s->slist);
   if(s->slist != NULL) {
       curl_easy_setopt(handle, CURLOPT_HTTPHEADER, s->slist);
   }
