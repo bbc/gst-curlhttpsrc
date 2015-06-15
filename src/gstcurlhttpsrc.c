@@ -818,9 +818,9 @@ gst_curl_http_src_create_easy_handle (GstCurlHttpSrc * s)
   }
 
   /* curl_slist_append dynamically allocates memory, but I need to free it */
-  gst_structure_foreach (s->extra_headers, _headers_to_curl_slist, &s->slist);
-  if(s->slist != NULL) {
-      curl_easy_setopt(handle, CURLOPT_HTTPHEADER, s->slist);
+  if (s->extra_headers != NULL) {
+    gst_structure_foreach (s->extra_headers, _headers_to_curl_slist, &s->slist);
+    curl_easy_setopt(handle, CURLOPT_HTTPHEADER, s->slist);
   }
 
   gst_curl_setopt_str_default (s, handle, CURLOPT_USERAGENT, s->user_agent);
