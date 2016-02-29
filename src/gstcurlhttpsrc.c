@@ -598,6 +598,7 @@ gst_curl_http_src_init (GstCurlHttpSrc * source)
   source->custom_ca_file = NULL;
   source->preferred_http_version = pref_http_ver;
   source->total_retries = GSTCURL_HANDLE_DEFAULT_RETRIES;
+  source->slist = NULL;
 
   gst_caps_replace(&source->caps, NULL);
   gst_base_src_set_automatic_eos (GST_BASE_SRC (source), FALSE);
@@ -1148,6 +1149,11 @@ gst_curl_http_src_destroy_easy_handle (GstCurlHttpSrc * src)
   if(src->curl_handle != NULL) {
     curl_easy_cleanup (src->curl_handle);
     src->curl_handle = NULL;
+  }
+  /* In addition, clean up the curl header slist if it was used. */
+  if (src->slist != NULL) {
+    curl_slist_free_all(src->slist);
+    src->slist = NULL;
   }
 }
 
