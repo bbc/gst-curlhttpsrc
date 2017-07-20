@@ -622,7 +622,7 @@ static void
 gst_curl_http_src_ref_multi (GstCurlHttpSrc *src) {
   GstCurlHttpSrcClass *klass;
 
-  GSTCURL_FUNCTION_ENTRY (source);
+  GSTCURL_FUNCTION_ENTRY (src);
 
   /*klass = (GstCurlHttpSrcClass) g_type_class_peek_parent (src);*/
   klass = G_TYPE_INSTANCE_GET_CLASS (src, GST_TYPE_CURL_HTTP_SRC,
@@ -664,7 +664,7 @@ gst_curl_http_src_ref_multi (GstCurlHttpSrc *src) {
   klass->multi_task_context.refcount++;
   g_mutex_unlock(&klass->multi_task_context.mutex);
 
-  GSTCURL_FUNCTION_EXIT (source);
+  GSTCURL_FUNCTION_EXIT (src);
 }
 
 /*
