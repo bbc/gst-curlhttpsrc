@@ -61,8 +61,7 @@ gst_curl_http_src_add_queue_item (GstCurlHttpSrcQueueElement ** queue,
 
   if (*queue == NULL) {
     /* Queue is currently empty, so create a new item on the head */
-    *queue =
-        (GstCurlHttpSrcQueueElement *)
+    *queue = (GstCurlHttpSrcQueueElement *)
         g_malloc (sizeof (GstCurlHttpSrcQueueElement));
     if (*queue == NULL) {
       return FALSE;
@@ -73,8 +72,7 @@ gst_curl_http_src_add_queue_item (GstCurlHttpSrcQueueElement ** queue,
     while (insert_point->next != NULL) {
       insert_point = insert_point->next;
     }
-    insert_point->next =
-        (GstCurlHttpSrcQueueElement *)
+    insert_point->next = (GstCurlHttpSrcQueueElement *)
         g_malloc (sizeof (GstCurlHttpSrcQueueElement));
     if (insert_point->next == NULL) {
       return FALSE;
@@ -159,11 +157,11 @@ gst_curl_http_src_remove_queue_handle (GstCurlHttpSrcQueueElement ** queue,
      "Removing queue item via curl handle for URI %s",
      this_qelement->p->uri); */
   /* First, signal the transfer owner thread to wake up */
-  g_mutex_lock (this_qelement->p->buffer_mutex);
-  g_cond_signal (this_qelement->p->signal);
+  g_mutex_lock (&this_qelement->p->buffer_mutex);
+  g_cond_signal (&this_qelement->p->signal);
   this_qelement->p->state = GSTCURL_DONE;
   this_qelement->p->curl_result = result;
-  g_mutex_unlock (this_qelement->p->buffer_mutex);
+  g_mutex_unlock (&this_qelement->p->buffer_mutex);
 
   /* First queue item matched. */
   if (prev_qelement == NULL) {

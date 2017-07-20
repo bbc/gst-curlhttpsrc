@@ -237,31 +237,36 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
   g_object_class_install_property (gobject_class, PROP_COMPRESS,
       g_param_spec_boolean ("compress", "Compress",
           "Allow compressed content encodings",
-          GSTCURL_HANDLE_DEFAULT_CURLOPT_ACCEPT_ENCODING, G_PARAM_READWRITE));
+          GSTCURL_HANDLE_DEFAULT_CURLOPT_ACCEPT_ENCODING,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_REDIRECT,
       g_param_spec_boolean ("automatic-redirect", "automatic-redirect",
           "Allow HTTP Redirections (HTTP Status Code 300 series)",
-          GSTCURL_HANDLE_DEFAULT_CURLOPT_FOLLOWLOCATION, G_PARAM_READWRITE));
+          GSTCURL_HANDLE_DEFAULT_CURLOPT_FOLLOWLOCATION,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_MAXREDIRECT,
       g_param_spec_int ("max-redirect", "Max-Redirect",
           "Maximum number of permitted redirections. -1 is unlimited.",
           GSTCURL_HANDLE_MIN_CURLOPT_MAXREDIRS,
           GSTCURL_HANDLE_MAX_CURLOPT_MAXREDIRS,
-          GSTCURL_HANDLE_DEFAULT_CURLOPT_MAXREDIRS, G_PARAM_READWRITE));
+          GSTCURL_HANDLE_DEFAULT_CURLOPT_MAXREDIRS,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_KEEPALIVE,
       g_param_spec_boolean ("keep-alive", "Keep-Alive",
           "Toggle keep-alive for connection reuse.",
-          GSTCURL_HANDLE_DEFAULT_CURLOPT_TCP_KEEPALIVE, G_PARAM_READWRITE));
+          GSTCURL_HANDLE_DEFAULT_CURLOPT_TCP_KEEPALIVE,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_TIMEOUT,
       g_param_spec_int ("timeout", "Timeout",
           "Value in seconds before timeout a blocking request (0 = no timeout)",
           GSTCURL_HANDLE_MIN_CURLOPT_TIMEOUT,
           GSTCURL_HANDLE_MAX_CURLOPT_TIMEOUT,
-          GSTCURL_HANDLE_DEFAULT_CURLOPT_TIMEOUT, G_PARAM_READWRITE));
+          GSTCURL_HANDLE_DEFAULT_CURLOPT_TIMEOUT,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_HEADERS,
       g_param_spec_boxed ("extra-headers", "Extra Headers",
@@ -271,24 +276,28 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
   g_object_class_install_property (gobject_class, PROP_STRICT_SSL,
       g_param_spec_boolean ("ssl-strict", "SSL Strict",
           "Strict SSL certificate checking",
-          GSTCURL_HANDLE_DEFAULT_CURLOPT_SSL_VERIFYPEER, G_PARAM_READWRITE));
+          GSTCURL_HANDLE_DEFAULT_CURLOPT_SSL_VERIFYPEER,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_SSL_CA_FILE,
       g_param_spec_string ("ssl-ca-file", "SSL CA File",
           "Location of an SSL CA file to use for checking SSL certificates",
-          GSTCURL_HANDLE_DEFAULT_CURLOPT_CAINFO, G_PARAM_READWRITE));
+          GSTCURL_HANDLE_DEFAULT_CURLOPT_CAINFO,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_RETRIES,
       g_param_spec_int ("retries", "Retries",
           "Maximum number of retries until giving up (-1=infinite)",
           GSTCURL_HANDLE_MIN_RETRIES, GSTCURL_HANDLE_MAX_RETRIES,
-          GSTCURL_HANDLE_DEFAULT_RETRIES, G_PARAM_READWRITE));
+          GSTCURL_HANDLE_DEFAULT_RETRIES,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_CONNECTIONMAXTIME,
       g_param_spec_uint ("max-connection-time", "Max-Connection-Time",
           "Maximum amount of time to keep-alive HTTP connections",
-          GSTCURL_MIN_CONNECTION_TIME, GSTCURL_MAX_CONNECTION_TIME, 30,
-          G_PARAM_CONSTRUCT_ONLY | G_PARAM_READWRITE));
+          GSTCURL_MIN_CONNECTION_TIME, GSTCURL_MAX_CONNECTION_TIME,
+          GSTCURL_DEFAULT_CONNECTION_TIME,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_MAXCONCURRENT_SERVER,
       g_param_spec_uint ("max-connections-per-server",
@@ -296,7 +305,7 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
           "Maximum number of connections allowed per server for HTTP/1.x",
           GSTCURL_MIN_CONNECTIONS_SERVER, GSTCURL_MAX_CONNECTIONS_SERVER,
           GSTCURL_DEFAULT_CONNECTIONS_SERVER,
-          G_PARAM_CONSTRUCT_ONLY | G_PARAM_READWRITE));
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_MAXCONCURRENT_PROXY,
       g_param_spec_uint ("max-connections-per-proxy",
@@ -304,14 +313,14 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
           "Maximum number of concurrent connections allowed per proxy for HTTP/1.x",
           GSTCURL_MIN_CONNECTIONS_PROXY, GSTCURL_MAX_CONNECTIONS_PROXY,
           GSTCURL_DEFAULT_CONNECTIONS_PROXY,
-          G_PARAM_CONSTRUCT_ONLY | G_PARAM_READWRITE));
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_MAXCONCURRENT_GLOBAL,
       g_param_spec_uint ("max-connections", "Max-Connections",
           "Maximum number of concurrent connections allowed for HTTP/1.x",
           GSTCURL_MIN_CONNECTIONS_GLOBAL, GSTCURL_MAX_CONNECTIONS_GLOBAL,
           GSTCURL_DEFAULT_CONNECTIONS_GLOBAL,
-          G_PARAM_CONSTRUCT_ONLY | G_PARAM_READWRITE));
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 #ifdef CURL_VERSION_HTTP2
   if (gst_curl_http_src_curl_capabilities->features && CURL_VERSION_HTTP2) {
     GST_INFO_OBJECT (klass, "Our curl version (%s) supports HTTP2!",
@@ -319,7 +328,8 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
     g_object_class_install_property (gobject_class, PROP_HTTPVERSION,
         g_param_spec_float ("http-version", "HTTP-Version",
             "The preferred HTTP protocol version (Supported 1.0, 1.1, 2.0)",
-            1.0, 2.0, pref_http_ver, G_PARAM_READWRITE));
+            1.0, 2.0, pref_http_ver,
+            G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
   } else {
 #endif
     if (pref_http_ver > 1.1) {
@@ -328,7 +338,8 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
     g_object_class_install_property (gobject_class, PROP_HTTPVERSION,
         g_param_spec_float ("http-version", "HTTP-Version",
             "The preferred HTTP protocol version (Supported 1.0, 1.1)",
-            1.0, 1.1, pref_http_ver, G_PARAM_READWRITE));
+            1.0, 1.1, pref_http_ver,
+            G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 #ifdef CURL_VERSION_HTTP2
   }
 #endif
@@ -587,6 +598,10 @@ gst_curl_http_src_init (GstCurlHttpSrc * source)
   source->max_3xx_redirects = GSTCURL_HANDLE_DEFAULT_CURLOPT_MAXREDIRS;
   source->keep_alive = GSTCURL_HANDLE_DEFAULT_CURLOPT_TCP_KEEPALIVE;
   source->timeout_secs = GSTCURL_HANDLE_DEFAULT_CURLOPT_TIMEOUT;
+  source->max_connection_time = GSTCURL_DEFAULT_CONNECTION_TIME;
+  source->max_conns_per_server = GSTCURL_DEFAULT_CONNECTIONS_SERVER;
+  source->max_conns_per_proxy = GSTCURL_DEFAULT_CONNECTIONS_PROXY;
+  source->max_conns_global = GSTCURL_DEFAULT_CONNECTIONS_GLOBAL;
   source->strict_ssl = GSTCURL_HANDLE_DEFAULT_CURLOPT_SSL_VERIFYPEER;
   source->custom_ca_file = NULL;
   source->preferred_http_version = pref_http_ver;
@@ -600,13 +615,9 @@ gst_curl_http_src_init (GstCurlHttpSrc * source)
   source->proxy_uri = g_strdup (g_getenv ("http_proxy"));
   source->no_proxy_list = g_strdup (g_getenv ("no_proxy"));
 
-  source->uri_mutex = g_new (GMutex, 1);
-  g_mutex_init (source->uri_mutex);
-
-  source->buffer_mutex = g_new (GMutex, 1);
-  g_mutex_init (source->buffer_mutex);
-  source->signal = g_new (GCond, 1);
-  g_cond_init (source->signal);
+  g_mutex_init (&source->uri_mutex);
+  g_mutex_init (&source->buffer_mutex);
+  g_cond_init (&source->signal);
 
   source->buffer = NULL;
   source->buffer_len = 0;
@@ -729,7 +740,6 @@ gst_curl_http_src_create (GstPushSrc * psrc, GstBuffer ** outbuf)
 {
   GstFlowReturn ret;
   GstCurlHttpSrc *src = GST_CURLHTTPSRC (psrc);
-  GstMapInfo info;
   GstCurlHttpSrcClass *klass;
 
   klass = G_TYPE_INSTANCE_GET_CLASS (src, GST_TYPE_CURL_HTTP_SRC,
@@ -770,9 +780,9 @@ retry:
   }
 
   /* Wait for data to become available, then punt it downstream */
-  g_mutex_lock (src->buffer_mutex);
+  g_mutex_lock (&src->buffer_mutex);
   while ((src->buffer_len == 0) && (src->state == GSTCURL_OK)) {
-    g_cond_wait (src->signal, src->buffer_mutex);
+    g_cond_wait (&src->signal, &src->buffer_mutex);
   }
 
   ret = gst_curl_http_src_handle_response (src);
@@ -809,7 +819,7 @@ retry:
         src->http_headers = NULL;
       }
       gst_curl_http_src_destroy_easy_handle (src);
-      g_mutex_unlock (src->buffer_mutex);
+      g_mutex_unlock (&src->buffer_mutex);
       goto retry;               /* Attempt a retry! */
     default:
       break;
@@ -821,9 +831,7 @@ retry:
     GST_DEBUG_OBJECT (src, "Pushing %u bytes of transfer for URI %s to pad",
         src->buffer_len, src->uri);
     *outbuf = gst_buffer_new_allocate (NULL, src->buffer_len, NULL);
-    gst_buffer_map (*outbuf, &info, GST_MAP_READWRITE);
-    memcpy (info.data, src->buffer, (size_t) src->buffer_len);
-    gst_buffer_unmap (*outbuf, &info);
+    gst_buffer_fill (*outbuf, 0, src->buffer, src->buffer_len);
 
     g_free (src->buffer);
     src->buffer = NULL;
@@ -866,7 +874,7 @@ retry:
   }
 
 escape:
-  g_mutex_unlock (src->buffer_mutex);
+  g_mutex_unlock (&src->buffer_mutex);
 
   GSTCURL_FUNCTION_EXIT (src);
   return ret;
@@ -1209,15 +1217,13 @@ static void
 gst_curl_http_src_cleanup_instance (GstCurlHttpSrc * src)
 {
   gint i;
-  g_mutex_lock (src->uri_mutex);
+  g_mutex_lock (&src->uri_mutex);
   g_free (src->uri);
   src->uri = NULL;
   g_free (src->redirect_uri);
   src->redirect_uri = NULL;
-  g_mutex_unlock (src->uri_mutex);
-  g_mutex_clear (src->uri_mutex);
-  g_free (src->uri_mutex);
-  src->uri_mutex = NULL;
+  g_mutex_unlock (&src->uri_mutex);
+  g_mutex_clear (&src->uri_mutex);
 
   g_free (src->proxy_uri);
   src->proxy_uri = NULL;
@@ -1235,11 +1241,9 @@ gst_curl_http_src_cleanup_instance (GstCurlHttpSrc * src)
   g_free (src->cookies);
   src->cookies = NULL;
 
-  g_free (src->buffer_mutex);
-  src->buffer_mutex = NULL;
+  g_mutex_clear(&src->buffer_mutex);
 
-  g_free (src->signal);
-  src->signal = NULL;
+  g_cond_clear(&src->signal);
 
   g_free (src->buffer);
   src->buffer = NULL;
@@ -1343,9 +1347,9 @@ gst_curl_http_src_urihandler_get_uri (GstURIHandler * handler)
 
   GSTCURL_FUNCTION_ENTRY (source);
 
-  g_mutex_lock (source->uri_mutex);
+  g_mutex_lock (&source->uri_mutex);
   ret = g_strdup (source->uri);
-  g_mutex_unlock (source->uri_mutex);
+  g_mutex_unlock (&source->uri_mutex);
 
   GSTCURL_FUNCTION_EXIT (source);
   return ret;
@@ -1361,7 +1365,7 @@ gst_curl_http_src_urihandler_set_uri (GstURIHandler * handler,
   g_return_val_if_fail (GST_IS_URI_HANDLER (handler), FALSE);
   g_return_val_if_fail (uri != NULL, FALSE);
 
-  g_mutex_lock (source->uri_mutex);
+  g_mutex_lock (&source->uri_mutex);
 
   if (source->uri != NULL) {
     GST_DEBUG_OBJECT (source,
@@ -1375,7 +1379,7 @@ gst_curl_http_src_urihandler_set_uri (GstURIHandler * handler,
   }
   source->retries_remaining = source->total_retries;
 
-  g_mutex_unlock (source->uri_mutex);
+  g_mutex_unlock (&source->uri_mutex);
 
   GSTCURL_FUNCTION_EXIT (source);
   return TRUE;
@@ -1538,7 +1542,7 @@ gst_curl_http_src_curl_multi_loop (gpointer thread_data)
         curl_multi_remove_handle (context->multi_handle,
             context->request_removal_element->curl_handle);
         qelement->p->state = GSTCURL_REMOVED;
-        g_cond_signal (qelement->p->signal);
+        g_cond_signal (&qelement->p->signal);
         gst_curl_http_src_remove_queue_item (&context->queue, qelement->p);
       }
     }
@@ -1568,13 +1572,13 @@ gst_curl_http_src_get_header (void *header, size_t size, size_t nmemb,
 
   GST_DEBUG_OBJECT (s, "Received header: %s", (char *) header);
 
-  g_mutex_lock (s->buffer_mutex);
+  g_mutex_lock (&s->buffer_mutex);
 
   if (s->http_headers == NULL) {
     /* Can't do anything here, so just silently swallow the header */
     GST_DEBUG_OBJECT (s, "HTTP Headers Structure has already been sent,"
         " ignoring header");
-    g_mutex_unlock (s->buffer_mutex);
+    g_mutex_unlock (&s->buffer_mutex);
     return size * nmemb;
   }
 
@@ -1644,7 +1648,7 @@ gst_curl_http_src_get_header (void *header, size_t size, size_t nmemb,
 
   s->hdrs_updated = TRUE;
 
-  g_mutex_unlock (s->buffer_mutex);
+  g_mutex_unlock (&s->buffer_mutex);
 
   return size * nmemb;
 }
@@ -1694,7 +1698,7 @@ gst_curl_http_src_get_chunks (void *chunk, size_t size, size_t nmemb, void *src)
   size_t chunk_len = size * nmemb;
   GST_TRACE_OBJECT (s,
       "Received curl chunk for URI %s of size %d", s->uri, (int) chunk_len);
-  g_mutex_lock (s->buffer_mutex);
+  g_mutex_lock (&s->buffer_mutex);
   s->buffer =
       realloc (s->buffer, (s->buffer_len + chunk_len + 1) * sizeof (char));
   if (s->buffer == NULL) {
@@ -1703,8 +1707,8 @@ gst_curl_http_src_get_chunks (void *chunk, size_t size, size_t nmemb, void *src)
   }
   memcpy (s->buffer + s->buffer_len, chunk, chunk_len);
   s->buffer_len += chunk_len;
-  g_cond_signal (s->signal);
-  g_mutex_unlock (s->buffer_mutex);
+  g_cond_signal (&s->signal);
+  g_mutex_unlock (&s->buffer_mutex);
   return chunk_len;
 }
 

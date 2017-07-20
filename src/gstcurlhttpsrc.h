@@ -155,7 +155,7 @@ struct _GstCurlHttpSrc
   GstPushSrc element;
 
   /* < private > */
-  GMutex *uri_mutex; /* Make the URIHandler get/set thread safe */
+  GMutex uri_mutex; /* Make the URIHandler get/set thread safe */
   /*
    * Things to tell libcURL about to build up the request message.
    */
@@ -219,8 +219,8 @@ struct _GstCurlHttpSrc
     GSTCURL_MAX
   } state;
   CURL *curl_handle;
-  GMutex *buffer_mutex;
-  GCond *signal;
+  GMutex buffer_mutex;
+  GCond signal;
   gchar *buffer;
   guint buffer_len;
   gboolean transfer_begun;
