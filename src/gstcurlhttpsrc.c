@@ -1002,6 +1002,7 @@ gst_curl_http_src_handle_response (GstCurlHttpSrc * src)
   gdouble curl_info_dbl;
   gchar *redirect_url;
   GstBaseSrc *basesrc;
+  const GValue *response_headers;
   GstFlowReturn ret = GST_FLOW_OK;
 
   GSTCURL_FUNCTION_ENTRY (src);
@@ -1090,7 +1091,7 @@ gst_curl_http_src_handle_response (GstCurlHttpSrc * src)
   /*
    * Push all the received headers down via a sicky event
    */
-  const GValue *response_headers = gst_structure_get_value (src->http_headers,
+  response_headers = gst_structure_get_value (src->http_headers,
       RESPONSE_HEADERS_NAME);
   if (gst_structure_n_fields (gst_value_get_structure (response_headers)) > 0) {
     GstEvent *hdrs_event;
@@ -1284,13 +1285,14 @@ static gboolean
 gst_curl_http_src_get_content_length (GstBaseSrc * bsrc, guint64 * size)
 {
   GstCurlHttpSrc *src = GST_CURLHTTPSRC (bsrc);
+  const GValue *response_headers;
   gboolean ret = FALSE;
 
   if (src->http_headers == NULL) {
     return FALSE;
   }
 
-  const GValue *response_headers = gst_structure_get_value (src->http_headers,
+  response_headers = gst_structure_get_value (src->http_headers,
       RESPONSE_HEADERS_NAME);
   if (gst_structure_has_field (gst_value_get_structure (response_headers),
           "content-length") == TRUE) {
