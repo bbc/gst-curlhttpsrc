@@ -321,8 +321,7 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
     g_object_class_install_property (gobject_class, PROP_HTTPVERSION,
         g_param_spec_float ("http-version", "HTTP-Version",
             "The preferred HTTP protocol version (Supported 1.0, 1.1, 2.0)",
-            1.0, 2.0, pref_http_ver,
-            G_PARAM_CONSTRUCT_ONLY | G_PARAM_READWRITE));
+            1.0, 2.0, pref_http_ver, G_PARAM_READWRITE));
   }
   else {
 #endif
@@ -332,8 +331,7 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
     g_object_class_install_property (gobject_class, PROP_HTTPVERSION,
         g_param_spec_float ("http-version", "HTTP-Version",
             "The preferred HTTP protocol version (Supported 1.0, 1.1)",
-            1.0, 1.1, pref_http_ver,
-            G_PARAM_CONSTRUCT_ONLY | G_PARAM_READWRITE));
+            1.0, 1.1, pref_http_ver, G_PARAM_READWRITE));
 #ifdef CURL_VERSION_HTTP2
   }
 #endif
