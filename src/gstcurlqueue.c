@@ -54,27 +54,28 @@
  * @return Returns TRUE (0) on success, FALSE (!0) is an error.
  */
 gboolean
-gst_curl_http_src_add_queue_item (GstCurlHttpSrcQueueElement **queue,
-                                      GstCurlHttpSrc *s)
+gst_curl_http_src_add_queue_item (GstCurlHttpSrcQueueElement ** queue,
+    GstCurlHttpSrc * s)
 {
   GstCurlHttpSrcQueueElement *insert_point;
 
   if (*queue == NULL) {
     /* Queue is currently empty, so create a new item on the head */
-    *queue = (GstCurlHttpSrcQueueElement *) g_malloc (
-	sizeof(GstCurlHttpSrcQueueElement));
+    *queue =
+        (GstCurlHttpSrcQueueElement *)
+        g_malloc (sizeof (GstCurlHttpSrcQueueElement));
     if (*queue == NULL) {
       return FALSE;
     }
     insert_point = *queue;
-  }
-  else {
+  } else {
     insert_point = *queue;
     while (insert_point->next != NULL) {
       insert_point = insert_point->next;
     }
-    insert_point->next = (GstCurlHttpSrcQueueElement *) g_malloc (
-	sizeof(GstCurlHttpSrcQueueElement));
+    insert_point->next =
+        (GstCurlHttpSrcQueueElement *)
+        g_malloc (sizeof (GstCurlHttpSrcQueueElement));
     if (insert_point->next == NULL) {
       return FALSE;
     }
@@ -94,8 +95,8 @@ gst_curl_http_src_add_queue_item (GstCurlHttpSrcQueueElement **queue,
  * @return Returns TRUE if item removed, FALSE if item couldn't be found.
  */
 gboolean
-gst_curl_http_src_remove_queue_item (GstCurlHttpSrcQueueElement **queue,
-                                     GstCurlHttpSrc *s)
+gst_curl_http_src_remove_queue_item (GstCurlHttpSrcQueueElement ** queue,
+    GstCurlHttpSrc * s)
 {
   GstCurlHttpSrcQueueElement *prev_qelement, *this_qelement;
 
@@ -114,18 +115,16 @@ gst_curl_http_src_remove_queue_item (GstCurlHttpSrcQueueElement **queue,
   if (prev_qelement == NULL) {
     /* First and only element? If so, free the element and make queue NULL */
     if (this_qelement->next == NULL) {
-      g_free(*queue);
+      g_free (*queue);
       *queue = NULL;
       return TRUE;
-    }
-    else {
+    } else {
       *queue = this_qelement->next;
     }
-  }
-  else {
+  } else {
     prev_qelement->next = this_qelement->next;
   }
-  g_free(this_qelement);
+  g_free (this_qelement);
   return TRUE;
 }
 
@@ -140,8 +139,8 @@ gst_curl_http_src_remove_queue_item (GstCurlHttpSrcQueueElement **queue,
  * @return Returns TRUE if item removed, FALSE if item couldn't be found.
  */
 gboolean
-gst_curl_http_src_remove_queue_handle (GstCurlHttpSrcQueueElement **queue,
-                                       CURL *handle, CURLcode result)
+gst_curl_http_src_remove_queue_handle (GstCurlHttpSrcQueueElement ** queue,
+    CURL * handle, CURLcode result)
 {
   GstCurlHttpSrcQueueElement *prev_qelement, *this_qelement;
 
@@ -157,30 +156,28 @@ gst_curl_http_src_remove_queue_handle (GstCurlHttpSrcQueueElement **queue,
   }
 
   /*GST_DEBUG_OBJECT (this_qelement->p,
-                    "Removing queue item via curl handle for URI %s",
-                    this_qelement->p->uri);*/
+     "Removing queue item via curl handle for URI %s",
+     this_qelement->p->uri); */
   /* First, signal the transfer owner thread to wake up */
-  g_mutex_lock(this_qelement->p->buffer_mutex);
-  g_cond_signal(this_qelement->p->signal);
+  g_mutex_lock (this_qelement->p->buffer_mutex);
+  g_cond_signal (this_qelement->p->signal);
   this_qelement->p->state = GSTCURL_DONE;
   this_qelement->p->curl_result = result;
-  g_mutex_unlock(this_qelement->p->buffer_mutex);
+  g_mutex_unlock (this_qelement->p->buffer_mutex);
 
   /* First queue item matched. */
   if (prev_qelement == NULL) {
     /* First and only element? If so, free the element and make queue NULL */
     if (this_qelement->next == NULL) {
-      g_free(*queue);
+      g_free (*queue);
       *queue = NULL;
       return TRUE;
-    }
-    else {
+    } else {
       *queue = this_qelement->next;
     }
-  }
-  else {
+  } else {
     prev_qelement->next = this_qelement->next;
   }
-  g_free(this_qelement);
+  g_free (this_qelement);
   return TRUE;
 }

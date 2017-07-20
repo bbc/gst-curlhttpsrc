@@ -78,7 +78,7 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#  include <config.h>
+#include <config.h>
 #endif
 
 #include "gstcurlhttpsrc.h"
@@ -106,17 +106,16 @@ static void gst_curl_http_src_set_property (GObject * object, guint prop_id,
 static void gst_curl_http_src_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
 static void gst_curl_http_src_init (GstCurlHttpSrc * source);
-static void gst_curl_http_src_ref_multi (GstCurlHttpSrc *src);
-static void gst_curl_http_src_unref_multi (GstCurlHttpSrc *src);
-static void gst_curl_http_src_finalize (GObject *obj);
+static void gst_curl_http_src_ref_multi (GstCurlHttpSrc * src);
+static void gst_curl_http_src_unref_multi (GstCurlHttpSrc * src);
+static void gst_curl_http_src_finalize (GObject * obj);
 static GstFlowReturn gst_curl_http_src_create (GstPushSrc * psrc,
     GstBuffer ** outbuf);
-static GstFlowReturn
-gst_curl_http_src_handle_response (GstCurlHttpSrc * src);
+static GstFlowReturn gst_curl_http_src_handle_response (GstCurlHttpSrc * src);
 static gboolean gst_curl_http_src_negotiate_caps (GstCurlHttpSrc * src);
 static GstStateChangeReturn gst_curl_http_src_change_state (GstElement *
     element, GstStateChange transition);
-static void gst_curl_http_src_cleanup_instance(GstCurlHttpSrc *src);
+static void gst_curl_http_src_cleanup_instance (GstCurlHttpSrc * src);
 static gboolean gst_curl_http_src_query (GstBaseSrc * bsrc, GstQuery * query);
 static gboolean gst_curl_http_src_get_content_length (GstBaseSrc * bsrc,
     guint64 * size);
@@ -136,9 +135,9 @@ static void gst_curl_http_src_curl_multi_loop (gpointer thread_data);
 static CURL *gst_curl_http_src_create_easy_handle (GstCurlHttpSrc * s);
 static inline void gst_curl_http_src_destroy_easy_handle (GstCurlHttpSrc * src);
 static size_t gst_curl_http_src_get_header (void *header, size_t size,
-    size_t nmemb, void * src);
+    size_t nmemb, void *src);
 static size_t gst_curl_http_src_get_chunks (void *chunk, size_t size,
-    size_t nmemb, void * src);
+    size_t nmemb, void *src);
 static void gst_curl_http_src_request_remove (GstCurlHttpSrc * src);
 static char *gst_curl_http_src_strcasestr (const char *haystack,
     const char *needle);
@@ -180,14 +179,13 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
     pref_http_ver = (gfloat) g_ascii_strtod (http_env, NULL);
     GST_INFO_OBJECT (klass, "Seen env var GST_CURL_HTTP_VER with value %.1f",
         pref_http_ver);
-  }
-  else {
+  } else {
     pref_http_ver = GSTCURL_HANDLE_DEFAULT_CURLOPT_HTTP_VERSION;
   }
 
   gst_curl_http_src_default_useragent =
-      g_strdup_printf("GStreamer curlhttpsrc libcurl/%s",
-                      gst_curl_http_src_curl_capabilities->version);
+      g_strdup_printf ("GStreamer curlhttpsrc libcurl/%s",
+      gst_curl_http_src_curl_capabilities->version);
 
   gobject_class->set_property = gst_curl_http_src_set_property;
   gobject_class->get_property = gst_curl_http_src_get_property;
@@ -322,8 +320,7 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
         g_param_spec_float ("http-version", "HTTP-Version",
             "The preferred HTTP protocol version (Supported 1.0, 1.1, 2.0)",
             1.0, 2.0, pref_http_ver, G_PARAM_READWRITE));
-  }
-  else {
+  } else {
 #endif
     if (pref_http_ver > 1.1) {
       pref_http_ver = GSTCURL_HANDLE_DEFAULT_CURLOPT_HTTP_VERSION;
@@ -342,9 +339,9 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
   gst_debug_log (gst_curl_loop_debug, GST_LEVEL_INFO, __FILE__, __func__,
       __LINE__, NULL, "Testing the curl_multi_loop debugging prints");
 
-  g_mutex_init(&klass->multi_task_context.mutex);
-  g_cond_init(&klass->multi_task_context.signal);
-  g_rec_mutex_init(&klass->multi_task_context.task_rec_mutex);
+  g_mutex_init (&klass->multi_task_context.mutex);
+  g_cond_init (&klass->multi_task_context.signal);
+  g_rec_mutex_init (&klass->multi_task_context.task_rec_mutex);
 
   gst_element_class_set_static_metadata (gstelement_class,
       "HTTP Client Source using libcURL",
@@ -370,13 +367,13 @@ gst_curl_http_src_set_property (GObject * object, guint prop_id,
       break;
     case PROP_USERNAME:
       if (source->username != NULL) {
-	g_free (source->username);
+        g_free (source->username);
       }
       source->username = g_value_dup_string (value);
       break;
     case PROP_PASSWORD:
       if (source->password != NULL) {
-	g_free (source->password);
+        g_free (source->password);
       }
       source->password = g_value_dup_string (value);
       break;
@@ -388,13 +385,13 @@ gst_curl_http_src_set_property (GObject * object, guint prop_id,
       break;
     case PROP_PROXYUSERNAME:
       if (source->proxy_user != NULL) {
-	  g_free (source->proxy_user);
+        g_free (source->proxy_user);
       }
       source->proxy_user = g_value_dup_string (value);
       break;
     case PROP_PROXYPASSWORD:
       if (source->proxy_pass != NULL) {
-	  g_free (source->proxy_pass);
+        g_free (source->proxy_pass);
       }
       source->proxy_pass = g_value_dup_string (value);
       break;
@@ -410,12 +407,12 @@ gst_curl_http_src_set_property (GObject * object, guint prop_id,
       source->user_agent = g_value_dup_string (value);
       break;
     case PROP_HEADERS:
-      {
-        const GstStructure *s = gst_value_get_structure (value);
-        if (source->request_headers)
-          gst_structure_free (source->request_headers);
-        source->request_headers = s ? gst_structure_copy (s) : NULL;
-      }
+    {
+      const GstStructure *s = gst_value_get_structure (value);
+      if (source->request_headers)
+        gst_structure_free (source->request_headers);
+      source->request_headers = s ? gst_structure_copy (s) : NULL;
+    }
       break;
     case PROP_COMPRESS:
       source->accept_compressed_encodings = g_value_get_boolean (value);
@@ -597,7 +594,7 @@ gst_curl_http_src_init (GstCurlHttpSrc * source)
   source->retries_remaining = source->total_retries;
   source->slist = NULL;
 
-  gst_caps_replace(&source->caps, NULL);
+  gst_caps_replace (&source->caps, NULL);
   gst_base_src_set_automatic_eos (GST_BASE_SRC (source), FALSE);
 
   source->proxy_uri = g_strdup (g_getenv ("http_proxy"));
@@ -629,17 +626,18 @@ gst_curl_http_src_init (GstCurlHttpSrc * source)
  * start it running. If it is already running, increment the refcount.
  */
 static void
-gst_curl_http_src_ref_multi (GstCurlHttpSrc *src) {
+gst_curl_http_src_ref_multi (GstCurlHttpSrc * src)
+{
   GstCurlHttpSrcClass *klass;
 
   GSTCURL_FUNCTION_ENTRY (src);
 
-  /*klass = (GstCurlHttpSrcClass) g_type_class_peek_parent (src);*/
+  /*klass = (GstCurlHttpSrcClass) g_type_class_peek_parent (src); */
   klass = G_TYPE_INSTANCE_GET_CLASS (src, GST_TYPE_CURL_HTTP_SRC,
-                                     GstCurlHttpSrcClass);
+      GstCurlHttpSrcClass);
 
-  g_mutex_lock(&klass->multi_task_context.mutex);
-  if(klass->multi_task_context.refcount == 0) {
+  g_mutex_lock (&klass->multi_task_context.mutex);
+  if (klass->multi_task_context.refcount == 0) {
     /* Set up various in-task properties */
 
     /* NULL is treated as the start of the list, no need to allocate. */
@@ -649,30 +647,30 @@ gst_curl_http_src_ref_multi (GstCurlHttpSrc *src) {
     klass->multi_task_context.multi_handle = curl_multi_init ();
 
     curl_multi_setopt (klass->multi_task_context.multi_handle,
-                       CURLMOPT_PIPELINING, 1);
+        CURLMOPT_PIPELINING, 1);
 #ifdef CURLMOPT_MAX_HOST_CONNECTIONS
     curl_multi_setopt (klass->multi_task_context.multi_handle,
-                       CURLMOPT_MAX_HOST_CONNECTIONS, 1);
+        CURLMOPT_MAX_HOST_CONNECTIONS, 1);
 #endif
 
     /* Start the thread */
     klass->multi_task_context.task = gst_task_new (
-            (GstTaskFunction) gst_curl_http_src_curl_multi_loop,
-            (gpointer) &klass->multi_task_context, NULL);
+        (GstTaskFunction) gst_curl_http_src_curl_multi_loop,
+        (gpointer) & klass->multi_task_context, NULL);
     gst_task_set_lock (klass->multi_task_context.task,
-                       &klass->multi_task_context.task_rec_mutex);
+        &klass->multi_task_context.task_rec_mutex);
     if (gst_task_start (klass->multi_task_context.task) == FALSE) {
       /*
        * This is a pretty critical failure and is not recoverable, so commit
        * sudoku and run away.
        */
-      GSTCURL_ERROR_PRINT("Couldn't start curl_multi task! Aborting.");
+      GSTCURL_ERROR_PRINT ("Couldn't start curl_multi task! Aborting.");
       abort ();
     }
-    GSTCURL_INFO_PRINT("Curl multi loop has been correctly initialised!");
+    GSTCURL_INFO_PRINT ("Curl multi loop has been correctly initialised!");
   }
   klass->multi_task_context.refcount++;
-  g_mutex_unlock(&klass->multi_task_context.mutex);
+  g_mutex_unlock (&klass->multi_task_context.mutex);
 
   GSTCURL_FUNCTION_EXIT (src);
 }
@@ -685,37 +683,36 @@ gst_curl_http_src_ref_multi (GstCurlHttpSrc *src) {
  * down.
  */
 static void
-gst_curl_http_src_unref_multi (GstCurlHttpSrc *src)
+gst_curl_http_src_unref_multi (GstCurlHttpSrc * src)
 {
   GstCurlHttpSrcClass *klass;
 
   GSTCURL_FUNCTION_ENTRY (src);
 
   klass = G_TYPE_INSTANCE_GET_CLASS (src, GST_TYPE_CURL_HTTP_SRC,
-                                     GstCurlHttpSrcClass);
+      GstCurlHttpSrcClass);
 
-  g_mutex_lock(&klass->multi_task_context.mutex);
+  g_mutex_lock (&klass->multi_task_context.mutex);
   klass->multi_task_context.refcount--;
   GST_INFO_OBJECT (src, "Closing instance, worker thread refcount is now %u",
-                   klass->multi_task_context.refcount);
+      klass->multi_task_context.refcount);
 
-  if(klass->multi_task_context.refcount <= 0) {
+  if (klass->multi_task_context.refcount <= 0) {
     /* Everything's done! Clean up. */
     gst_task_pause (klass->multi_task_context.task);
     klass->multi_task_context.state = GSTCURL_MULTI_LOOP_STATE_STOP;
     g_cond_signal (&klass->multi_task_context.signal);
     g_mutex_unlock (&klass->multi_task_context.mutex);
     gst_task_join (klass->multi_task_context.task);
-  }
-  else {
-    g_mutex_unlock(&klass->multi_task_context.mutex);
+  } else {
+    g_mutex_unlock (&klass->multi_task_context.mutex);
   }
 
   GSTCURL_FUNCTION_EXIT (src);
 }
 
 static void
-gst_curl_http_src_finalize (GObject *obj)
+gst_curl_http_src_finalize (GObject * obj)
 {
   GstCurlHttpSrc *src = GST_CURLHTTPSRC (obj);
 
@@ -724,7 +721,7 @@ gst_curl_http_src_finalize (GObject *obj)
   /* Cleanup all memory allocated */
   gst_curl_http_src_cleanup_instance (src);
 
-  GSTCURL_FUNCTION_EXIT(src);
+  GSTCURL_FUNCTION_EXIT (src);
 }
 
 static GstFlowReturn
@@ -736,7 +733,7 @@ gst_curl_http_src_create (GstPushSrc * psrc, GstBuffer ** outbuf)
   GstCurlHttpSrcClass *klass;
 
   klass = G_TYPE_INSTANCE_GET_CLASS (src, GST_TYPE_CURL_HTTP_SRC,
-                                       GstCurlHttpSrcClass);
+      GstCurlHttpSrcClass);
 
   GSTCURL_FUNCTION_ENTRY (src);
   ret = GST_FLOW_OK;
@@ -746,7 +743,7 @@ retry:
     /* Create the Easy Handle and set up the session. */
     src->curl_handle = gst_curl_http_src_create_easy_handle (src);
 
-    g_mutex_lock(&klass->multi_task_context.mutex);
+    g_mutex_lock (&klass->multi_task_context.mutex);
 
     if (gst_curl_http_src_add_queue_item (&klass->multi_task_context.queue, src)
         == FALSE) {
@@ -757,7 +754,7 @@ retry:
     /* Signal the worker thread */
     klass->multi_task_context.state = GSTCURL_MULTI_LOOP_STATE_QUEUE_EVENT;
     g_cond_signal (&klass->multi_task_context.signal);
-    g_mutex_unlock(&klass->multi_task_context.mutex);
+    g_mutex_unlock (&klass->multi_task_context.mutex);
 
     src->state = GSTCURL_OK;
     src->transfer_begun = TRUE;
@@ -766,117 +763,117 @@ retry:
     GST_DEBUG_OBJECT (src, "Submitted request for URI %s to curl", src->uri);
 
     src->http_headers = gst_structure_new (HTTP_HEADERS_NAME,
-            URI_NAME, G_TYPE_STRING, src->uri,
-            REQUEST_HEADERS_NAME, GST_TYPE_STRUCTURE, src->request_headers,
-            RESPONSE_HEADERS_NAME, GST_TYPE_STRUCTURE,
-                gst_structure_new_empty(RESPONSE_HEADERS_NAME), NULL);
+        URI_NAME, G_TYPE_STRING, src->uri,
+        REQUEST_HEADERS_NAME, GST_TYPE_STRUCTURE, src->request_headers,
+        RESPONSE_HEADERS_NAME, GST_TYPE_STRUCTURE,
+        gst_structure_new_empty (RESPONSE_HEADERS_NAME), NULL);
   }
 
   /* Wait for data to become available, then punt it downstream */
-  g_mutex_lock(src->buffer_mutex);
+  g_mutex_lock (src->buffer_mutex);
   while ((src->buffer_len == 0) && (src->state == GSTCURL_OK)) {
-    g_cond_wait(src->signal, src->buffer_mutex);
+    g_cond_wait (src->signal, src->buffer_mutex);
   }
 
-  ret = gst_curl_http_src_handle_response(src);
+  ret = gst_curl_http_src_handle_response (src);
   switch (ret) {
-  case GST_FLOW_ERROR:
-    goto escape; /* Don't attempt a retry, just bomb out */
-  case GST_FLOW_CUSTOM_ERROR:
-    if (src->data_received == TRUE) {
-      /*
-       * If data has already been received, we can't recall previously sent
-       * buffers so don't attempt a retry in this case.
-       *
-       * TODO: Remember the position we got to, and make a range request for the
-       * resource without the bit we've already received?
-       */
-      GST_WARNING_OBJECT (src, "Failed mid-transfer, can't continue for URI %s",
-          src->uri);
-      ret = GST_FLOW_ERROR;
-      goto escape;
-    }
-    src->retries_remaining--;
-    if (src->retries_remaining == 0) {
-      GST_WARNING_OBJECT (src, "Out of retries for URI %s", src->uri);
-      ret = GST_FLOW_ERROR; /* Don't attempt a retry, just bomb out */
-      goto escape;
-    }
-    GST_INFO_OBJECT (src, "Attempting retry for URI %s", src->uri);
-    src->state = GSTCURL_NONE;
-    src->transfer_begun = FALSE;
-    src->status_code = 0;
-    src->hdrs_updated = FALSE;
-    if (src->http_headers != NULL) {
-      gst_structure_free(src->http_headers);
-      src->http_headers = NULL;
-    }
-    gst_curl_http_src_destroy_easy_handle (src);
-    g_mutex_unlock(src->buffer_mutex);
-    goto retry; /* Attempt a retry! */
-  default:
-    break;
+    case GST_FLOW_ERROR:
+      goto escape;              /* Don't attempt a retry, just bomb out */
+    case GST_FLOW_CUSTOM_ERROR:
+      if (src->data_received == TRUE) {
+        /*
+         * If data has already been received, we can't recall previously sent
+         * buffers so don't attempt a retry in this case.
+         *
+         * TODO: Remember the position we got to, and make a range request for
+         * the resource without the bit we've already received?
+         */
+        GST_WARNING_OBJECT (src,
+            "Failed mid-transfer, can't continue for URI %s", src->uri);
+        ret = GST_FLOW_ERROR;
+        goto escape;
+      }
+      src->retries_remaining--;
+      if (src->retries_remaining == 0) {
+        GST_WARNING_OBJECT (src, "Out of retries for URI %s", src->uri);
+        ret = GST_FLOW_ERROR;   /* Don't attempt a retry, just bomb out */
+        goto escape;
+      }
+      GST_INFO_OBJECT (src, "Attempting retry for URI %s", src->uri);
+      src->state = GSTCURL_NONE;
+      src->transfer_begun = FALSE;
+      src->status_code = 0;
+      src->hdrs_updated = FALSE;
+      if (src->http_headers != NULL) {
+        gst_structure_free (src->http_headers);
+        src->http_headers = NULL;
+      }
+      gst_curl_http_src_destroy_easy_handle (src);
+      g_mutex_unlock (src->buffer_mutex);
+      goto retry;               /* Attempt a retry! */
+    default:
+      break;
   }
 
   if (((src->state == GSTCURL_OK) || (src->state == GSTCURL_DONE)) &&
-          (src->buffer_len > 0)) {
+      (src->buffer_len > 0)) {
 
-    GST_DEBUG_OBJECT(src, "Pushing %u bytes of transfer for URI %s to pad",
-            src->buffer_len, src->uri);
+    GST_DEBUG_OBJECT (src, "Pushing %u bytes of transfer for URI %s to pad",
+        src->buffer_len, src->uri);
     *outbuf = gst_buffer_new_allocate (NULL, src->buffer_len, NULL);
     gst_buffer_map (*outbuf, &info, GST_MAP_READWRITE);
     memcpy (info.data, src->buffer, (size_t) src->buffer_len);
     gst_buffer_unmap (*outbuf, &info);
 
-    g_free(src->buffer);
+    g_free (src->buffer);
     src->buffer = NULL;
     src->buffer_len = 0;
     src->data_received = TRUE;
 
     /* ret should still be GST_FLOW_OK */
   } else if ((src->state == GSTCURL_DONE) && (src->buffer_len == 0)) {
-      GST_INFO_OBJECT (src, "Full body received, signalling EOS for URI %s.",
-          src->uri);
-      src->state = GSTCURL_NONE;
-      src->transfer_begun = FALSE;
-      src->status_code = 0;
-      src->hdrs_updated = FALSE;
-      gst_curl_http_src_destroy_easy_handle (src);
-      ret = GST_FLOW_EOS;
+    GST_INFO_OBJECT (src, "Full body received, signalling EOS for URI %s.",
+        src->uri);
+    src->state = GSTCURL_NONE;
+    src->transfer_begun = FALSE;
+    src->status_code = 0;
+    src->hdrs_updated = FALSE;
+    gst_curl_http_src_destroy_easy_handle (src);
+    ret = GST_FLOW_EOS;
   } else {
     switch (src->state) {
-    case GSTCURL_NONE:
-      GST_WARNING_OBJECT(src, "Got unexpected GSTCURL_NONE state!");
-      break;
-    case GSTCURL_REMOVED:
-      GST_WARNING_OBJECT(src, "Transfer got removed from the curl queue");
-      ret = GST_FLOW_EOS;
-      break;
-    case GSTCURL_BAD_QUEUE_REQUEST:
-      GST_ERROR_OBJECT(src, "Bad Queue Request!");
-      ret = GST_FLOW_ERROR;
-      break;
-    case GSTCURL_TOTAL_ERROR:
-      GST_ERROR_OBJECT(src, "Critical, unrecoverable error!");
-      ret = GST_FLOW_ERROR;
-      break;
-    case GSTCURL_PIPELINE_NULL:
-      GST_ERROR_OBJECT(src, "Pipeline null");
-      break;
-    default:
-      GST_ERROR_OBJECT(src, "Unknown state of %u", src->state);
+      case GSTCURL_NONE:
+        GST_WARNING_OBJECT (src, "Got unexpected GSTCURL_NONE state!");
+        break;
+      case GSTCURL_REMOVED:
+        GST_WARNING_OBJECT (src, "Transfer got removed from the curl queue");
+        ret = GST_FLOW_EOS;
+        break;
+      case GSTCURL_BAD_QUEUE_REQUEST:
+        GST_ERROR_OBJECT (src, "Bad Queue Request!");
+        ret = GST_FLOW_ERROR;
+        break;
+      case GSTCURL_TOTAL_ERROR:
+        GST_ERROR_OBJECT (src, "Critical, unrecoverable error!");
+        ret = GST_FLOW_ERROR;
+        break;
+      case GSTCURL_PIPELINE_NULL:
+        GST_ERROR_OBJECT (src, "Pipeline null");
+        break;
+      default:
+        GST_ERROR_OBJECT (src, "Unknown state of %u", src->state);
     }
   }
 
 escape:
-  g_mutex_unlock(src->buffer_mutex);
+  g_mutex_unlock (src->buffer_mutex);
 
   GSTCURL_FUNCTION_EXIT (src);
   return ret;
 }
 
 static gboolean
-_headers_to_curl_slist (GQuark field_id, const GValue *value, gpointer ptr)
+_headers_to_curl_slist (GQuark field_id, const GValue * value, gpointer ptr)
 {
   gchar *field;
   struct curl_slist **p_slist = ptr;
@@ -926,8 +923,9 @@ gst_curl_http_src_create_easy_handle (GstCurlHttpSrc * s)
 
   /* curl_slist_append dynamically allocates memory, but I need to free it */
   if (s->request_headers != NULL) {
-    gst_structure_foreach (s->request_headers, _headers_to_curl_slist, &s->slist);
-    curl_easy_setopt(handle, CURLOPT_HTTPHEADER, s->slist);
+    gst_structure_foreach (s->request_headers, _headers_to_curl_slist,
+        &s->slist);
+    curl_easy_setopt (handle, CURLOPT_HTTPHEADER, s->slist);
   }
 
   gst_curl_setopt_str_default (s, handle, CURLOPT_USERAGENT, s->user_agent);
@@ -937,32 +935,33 @@ gst_curl_http_src_create_easy_handle (GstCurlHttpSrc * s)
    * TRUE, simply set the value as an empty string as this allows both gzip and
    * zlib compression methods.
    */
-  if(s->accept_compressed_encodings == TRUE) {
-      curl_easy_setopt(handle, CURLOPT_ACCEPT_ENCODING, "");
-  }
-  else {
-      curl_easy_setopt(handle, CURLOPT_ACCEPT_ENCODING, "identity");
+  if (s->accept_compressed_encodings == TRUE) {
+    curl_easy_setopt (handle, CURLOPT_ACCEPT_ENCODING, "");
+  } else {
+    curl_easy_setopt (handle, CURLOPT_ACCEPT_ENCODING, "identity");
   }
 
   gst_curl_setopt_int (s, handle, CURLOPT_FOLLOWLOCATION,
-                       s->allow_3xx_redirect);
+      s->allow_3xx_redirect);
   gst_curl_setopt_int_default (s, handle, CURLOPT_MAXREDIRS,
-                       s->max_3xx_redirects);
+      s->max_3xx_redirects);
   gst_curl_setopt_int (s, handle, CURLOPT_TCP_KEEPALIVE,
-                       GSTCURL_BINARYBOOL (s->keep_alive));
+      GSTCURL_BINARYBOOL (s->keep_alive));
   gst_curl_setopt_int (s, handle, CURLOPT_TIMEOUT, s->timeout_secs);
   gst_curl_setopt_int (s, handle, CURLOPT_SSL_VERIFYPEER,
-                       GSTCURL_BINARYBOOL (s->strict_ssl));
+      GSTCURL_BINARYBOOL (s->strict_ssl));
   gst_curl_setopt_str (s, handle, CURLOPT_CAINFO, s->custom_ca_file);
 
   switch (s->preferred_http_version) {
     case GSTCURL_HTTP_VERSION_1_0:
       GST_DEBUG_OBJECT (s, "Setting version as HTTP/1.0");
-      gst_curl_setopt_int (s, handle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
+      gst_curl_setopt_int (s, handle, CURLOPT_HTTP_VERSION,
+          CURL_HTTP_VERSION_1_0);
       break;
     case GSTCURL_HTTP_VERSION_1_1:
       GST_DEBUG_OBJECT (s, "Setting version as HTTP/1.1");
-      gst_curl_setopt_int (s, handle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+      gst_curl_setopt_int (s, handle, CURLOPT_HTTP_VERSION,
+          CURL_HTTP_VERSION_1_1);
       break;
 #ifdef CURL_VERSION_HTTP2
     case GSTCURL_HTTP_VERSION_2_0:
@@ -976,10 +975,10 @@ gst_curl_http_src_create_easy_handle (GstCurlHttpSrc * s)
   }
 
   curl_easy_setopt (handle, CURLOPT_HEADERFUNCTION,
-                    gst_curl_http_src_get_header);
+      gst_curl_http_src_get_header);
   curl_easy_setopt (handle, CURLOPT_HEADERDATA, s);
   curl_easy_setopt (handle, CURLOPT_WRITEFUNCTION,
-                    gst_curl_http_src_get_chunks);
+      gst_curl_http_src_get_chunks);
   curl_easy_setopt (handle, CURLOPT_WRITEDATA, s);
 
   curl_easy_setopt (handle, CURLOPT_ERRORBUFFER, s->curl_errbuf);
@@ -997,7 +996,7 @@ gst_curl_http_src_handle_response (GstCurlHttpSrc * src)
   GstBaseSrc *basesrc;
   GstFlowReturn ret = GST_FLOW_OK;
 
-  GSTCURL_FUNCTION_ENTRY(src);
+  GSTCURL_FUNCTION_ENTRY (src);
 
   GST_TRACE_OBJECT (src, "status code: %d, curl return code %d",
       src->status_code, src->curl_result);
@@ -1005,7 +1004,7 @@ gst_curl_http_src_handle_response (GstCurlHttpSrc * src)
   /* Check the curl result code first - anything not 0 is probably a failure */
   if (src->curl_result != 0) {
     GST_WARNING_OBJECT (src, "Curl failed the transfer (%d): %s",
-        src->curl_result, curl_easy_strerror(src->curl_result));
+        src->curl_result, curl_easy_strerror (src->curl_result));
     GST_DEBUG_OBJECT (src, "Reason for curl failure: %s", src->curl_errbuf);
     return GST_FLOW_ERROR;
   }
@@ -1020,7 +1019,7 @@ gst_curl_http_src_handle_response (GstCurlHttpSrc * src)
     return GST_FLOW_ERROR;
   } else if (src->status_code == 0) {
     if (curl_easy_getinfo (src->curl_handle, CURLINFO_TOTAL_TIME,
-                           &curl_info_dbl) != CURLE_OK) {
+            &curl_info_dbl) != CURLE_OK) {
       /* Curl cannot be relied on in this state, so return an error. */
       return GST_FLOW_ERROR;
     }
@@ -1029,14 +1028,14 @@ gst_curl_http_src_handle_response (GstCurlHttpSrc * src)
     }
 
     if (curl_easy_getinfo (src->curl_handle, CURLINFO_OS_ERRNO,
-                           &curl_info_long) != CURLE_OK) {
+            &curl_info_long) != CURLE_OK) {
       /* Curl cannot be relied on in this state, so return an error. */
       return GST_FLOW_ERROR;
 
     }
 
     GST_WARNING_OBJECT (src, "Errno for CONNECT call was %ld (%s)",
-        curl_info_long, g_strerror((gint) curl_info_long));
+        curl_info_long, g_strerror ((gint) curl_info_long));
 
     /* Some of these responses are retry-able, others not. Set the returned
      * state to ERROR so we crash out instead of fruitlessly retrying.
@@ -1051,16 +1050,17 @@ gst_curl_http_src_handle_response (GstCurlHttpSrc * src)
   /*
    * Deal with redirections...
    */
-  if(curl_easy_getinfo(src->curl_handle, CURLINFO_EFFECTIVE_URL, &redirect_url)
-                       == CURLE_OK) {
-    size_t lena,lenb;
-    lena = strlen(src->uri);
-    lenb = strlen(redirect_url);
-    if(g_ascii_strncasecmp(src->uri, redirect_url, (lena>lenb)?lenb:lena) != 0)
-    {
-      GST_INFO_OBJECT(src, "Got a redirect to %s, setting as redirect URI",
-                      redirect_url);
-      src->redirect_uri = g_strdup(redirect_url);
+  if (curl_easy_getinfo (src->curl_handle, CURLINFO_EFFECTIVE_URL,
+          &redirect_url)
+      == CURLE_OK) {
+    size_t lena, lenb;
+    lena = strlen (src->uri);
+    lenb = strlen (redirect_url);
+    if (g_ascii_strncasecmp (src->uri, redirect_url,
+            (lena > lenb) ? lenb : lena) != 0) {
+      GST_INFO_OBJECT (src, "Got a redirect to %s, setting as redirect URI",
+          redirect_url);
+      src->redirect_uri = g_strdup (redirect_url);
       gst_structure_remove_field (src->http_headers, REDIRECT_URI_NAME);
       gst_structure_set (src->http_headers, REDIRECT_URI_NAME,
           GST_TYPE_STRUCTURE, redirect_url, NULL);
@@ -1082,13 +1082,13 @@ gst_curl_http_src_handle_response (GstCurlHttpSrc * src)
   /*
    * Push all the received headers down via a sicky event
    */
-  const GValue *response_headers = gst_structure_get_value(src->http_headers,
-              RESPONSE_HEADERS_NAME);
-  if(gst_structure_n_fields(gst_value_get_structure(response_headers)) > 0) {
+  const GValue *response_headers = gst_structure_get_value (src->http_headers,
+      RESPONSE_HEADERS_NAME);
+  if (gst_structure_n_fields (gst_value_get_structure (response_headers)) > 0) {
     GstEvent *hdrs_event;
     /* gst_event_new_custom takes ownership of our structure */
     hdrs_event = gst_event_new_custom (GST_EVENT_CUSTOM_DOWNSTREAM_STICKY,
-            src->http_headers);
+        src->http_headers);
     gst_pad_push_event (GST_BASE_SRC_PAD (src), hdrs_event);
     src->http_headers = NULL;
   }
@@ -1096,18 +1096,17 @@ gst_curl_http_src_handle_response (GstCurlHttpSrc * src)
   /*
    * Push the content length
    */
-  if(curl_easy_getinfo(src->curl_handle, CURLINFO_CONTENT_LENGTH_DOWNLOAD,
-                       &curl_info_dbl) == CURLE_OK) {
+  if (curl_easy_getinfo (src->curl_handle, CURLINFO_CONTENT_LENGTH_DOWNLOAD,
+          &curl_info_dbl) == CURLE_OK) {
     if (curl_info_dbl == -1) {
-      GST_WARNING_OBJECT(src,
-                         "No Content-Length was specified in the response.");
-    }
-    else {
-      GST_INFO_OBJECT(src, "Content-Length was given as %.0f", curl_info_dbl);
+      GST_WARNING_OBJECT (src,
+          "No Content-Length was specified in the response.");
+    } else {
+      GST_INFO_OBJECT (src, "Content-Length was given as %.0f", curl_info_dbl);
       basesrc = GST_BASE_SRC_CAST (src);
       basesrc->segment.duration = curl_info_dbl;
       gst_element_post_message (GST_ELEMENT (src),
-                          gst_message_new_duration_changed (GST_OBJECT (src)));
+          gst_message_new_duration_changed (GST_OBJECT (src)));
     }
   }
 
@@ -1127,27 +1126,27 @@ static gboolean
 gst_curl_http_src_negotiate_caps (GstCurlHttpSrc * src)
 {
   if (src->caps && src->http_headers) {
-    const GValue *response_headers = gst_structure_get_value(src->http_headers,
+    const GValue *response_headers = gst_structure_get_value (src->http_headers,
         RESPONSE_HEADERS_NAME);
 
-    if (gst_structure_has_field(
-            gst_value_get_structure(response_headers), "content-type") == TRUE)
-    {
-      const GValue *gv_content_type = gst_structure_get_value(
-                gst_value_get_structure(response_headers), "content-type");
-      if (G_VALUE_HOLDS_STRING(gv_content_type) == TRUE) {
-        const gchar *content_type = g_value_get_string(gv_content_type);
+    if (gst_structure_has_field (gst_value_get_structure (response_headers),
+            "content-type") == TRUE) {
+      const GValue *gv_content_type =
+          gst_structure_get_value (gst_value_get_structure (response_headers),
+          "content-type");
+      if (G_VALUE_HOLDS_STRING (gv_content_type) == TRUE) {
+        const gchar *content_type = g_value_get_string (gv_content_type);
         GST_INFO_OBJECT (src, "Setting caps as Content-Type of %s",
-                         content_type);
+            content_type);
         src->caps = gst_caps_make_writable (src->caps);
         gst_caps_set_simple (src->caps, "content-type", G_TYPE_STRING,
-                             content_type, NULL);
-        if (gst_base_src_set_caps(GST_BASE_SRC (src), src->caps) != TRUE) {
+            content_type, NULL);
+        if (gst_base_src_set_caps (GST_BASE_SRC (src), src->caps) != TRUE) {
           GST_ERROR_OBJECT (src, "Setting caps failed!");
           return FALSE;
         }
       } else {
-        GST_ERROR_OBJECT(src, "Content Type doesn't contain expected string");
+        GST_ERROR_OBJECT (src, "Content Type doesn't contain expected string");
         return FALSE;
       }
     }
@@ -1165,13 +1164,13 @@ static inline void
 gst_curl_http_src_destroy_easy_handle (GstCurlHttpSrc * src)
 {
   /* Thank you Handles, and well done. Well done, mate. */
-  if(src->curl_handle != NULL) {
+  if (src->curl_handle != NULL) {
     curl_easy_cleanup (src->curl_handle);
     src->curl_handle = NULL;
   }
   /* In addition, clean up the curl header slist if it was used. */
   if (src->slist != NULL) {
-    curl_slist_free_all(src->slist);
+    curl_slist_free_all (src->slist);
     src->slist = NULL;
   }
 }
@@ -1185,12 +1184,12 @@ gst_curl_http_src_change_state (GstElement * element, GstStateChange transition)
 
   switch (transition) {
     case GST_STATE_CHANGE_NULL_TO_READY:
-      gst_curl_http_src_ref_multi(source);
+      gst_curl_http_src_ref_multi (source);
       break;
     case GST_STATE_CHANGE_READY_TO_NULL:
       /* The pipeline has ended, so signal any running request to end. */
       gst_curl_http_src_request_remove (source);
-      gst_curl_http_src_unref_multi(source);
+      gst_curl_http_src_unref_multi (source);
       break;
     default:
       break;
@@ -1207,51 +1206,50 @@ gst_curl_http_src_change_state (GstElement * element, GstStateChange transition)
  * closing before we leak it.
  */
 static void
-gst_curl_http_src_cleanup_instance(GstCurlHttpSrc *src)
+gst_curl_http_src_cleanup_instance (GstCurlHttpSrc * src)
 {
   gint i;
-  g_mutex_lock(src->uri_mutex);
-  g_free(src->uri);
+  g_mutex_lock (src->uri_mutex);
+  g_free (src->uri);
   src->uri = NULL;
-  g_free(src->redirect_uri);
+  g_free (src->redirect_uri);
   src->redirect_uri = NULL;
-  g_mutex_unlock(src->uri_mutex);
-  g_mutex_clear(src->uri_mutex);
-  g_free(src->uri_mutex);
+  g_mutex_unlock (src->uri_mutex);
+  g_mutex_clear (src->uri_mutex);
+  g_free (src->uri_mutex);
   src->uri_mutex = NULL;
 
-  g_free(src->proxy_uri);
+  g_free (src->proxy_uri);
   src->proxy_uri = NULL;
-  g_free(src->no_proxy_list);
+  g_free (src->no_proxy_list);
   src->no_proxy_list = NULL;
-  g_free(src->proxy_user);
+  g_free (src->proxy_user);
   src->proxy_user = NULL;
-  g_free(src->proxy_pass);
+  g_free (src->proxy_pass);
   src->proxy_pass = NULL;
 
-  for(i = 0; i < src->number_cookies; i++)
-  {
-    g_free(src->cookies[i]);
+  for (i = 0; i < src->number_cookies; i++) {
+    g_free (src->cookies[i]);
     src->cookies[i] = NULL;
   }
-  g_free(src->cookies);
+  g_free (src->cookies);
   src->cookies = NULL;
 
-  g_free(src->buffer_mutex);
+  g_free (src->buffer_mutex);
   src->buffer_mutex = NULL;
 
-  g_free(src->signal);
+  g_free (src->signal);
   src->signal = NULL;
 
-  g_free(src->buffer);
+  g_free (src->buffer);
   src->buffer = NULL;
 
   if (src->http_headers != NULL) {
-    gst_structure_free(src->http_headers);
+    gst_structure_free (src->http_headers);
     src->http_headers = NULL;
   }
 
-  gst_curl_http_src_destroy_easy_handle(src);
+  gst_curl_http_src_destroy_easy_handle (src);
 }
 
 static gboolean
@@ -1259,7 +1257,7 @@ gst_curl_http_src_query (GstBaseSrc * bsrc, GstQuery * query)
 {
   GstCurlHttpSrc *src = GST_CURLHTTPSRC (bsrc);
   gboolean ret;
-  GSTCURL_FUNCTION_ENTRY(src);
+  GSTCURL_FUNCTION_ENTRY (src);
 
   switch (GST_QUERY_TYPE (query)) {
     case GST_QUERY_URI:
@@ -1274,7 +1272,7 @@ gst_curl_http_src_query (GstBaseSrc * bsrc, GstQuery * query)
       break;
   }
 
-  GSTCURL_FUNCTION_EXIT(src);
+  GSTCURL_FUNCTION_EXIT (src);
   return ret;
 }
 
@@ -1288,24 +1286,24 @@ gst_curl_http_src_get_content_length (GstBaseSrc * bsrc, guint64 * size)
     return FALSE;
   }
 
-  const GValue *response_headers = gst_structure_get_value(src->http_headers,
-                RESPONSE_HEADERS_NAME);
-  if (gst_structure_has_field(
-          gst_value_get_structure(response_headers), "content-length") == TRUE)
-  {
-    const GValue *content_length = gst_structure_get_value(
-              gst_value_get_structure(response_headers), "content-length");
-    if (G_VALUE_HOLDS_STRING(content_length) == TRUE) {
-      const gchar *len = g_value_get_string(content_length);
-      *size = (guint64) g_ascii_strtoull(len, NULL, 10);
+  const GValue *response_headers = gst_structure_get_value (src->http_headers,
+      RESPONSE_HEADERS_NAME);
+  if (gst_structure_has_field (gst_value_get_structure (response_headers),
+          "content-length") == TRUE) {
+    const GValue *content_length =
+        gst_structure_get_value (gst_value_get_structure (response_headers),
+        "content-length");
+    if (G_VALUE_HOLDS_STRING (content_length) == TRUE) {
+      const gchar *len = g_value_get_string (content_length);
+      *size = (guint64) g_ascii_strtoull (len, NULL, 10);
       ret = TRUE;
     } else {
-      GST_ERROR_OBJECT(src, "Content Length doesn't contain expected string");
+      GST_ERROR_OBJECT (src, "Content Length doesn't contain expected string");
     }
   }
 
   GST_DEBUG_OBJECT (src,
-                  "No content length has yet been set, or there was an error!");
+      "No content length has yet been set, or there was an error!");
   return ret;
 }
 
@@ -1337,7 +1335,7 @@ gst_curl_http_src_urihandler_get_protocols (GType type)
 static gchar *
 gst_curl_http_src_urihandler_get_uri (GstURIHandler * handler)
 {
-  gchar* ret;
+  gchar *ret;
   GstCurlHttpSrc *source;
 
   g_return_val_if_fail (GST_IS_URI_HANDLER (handler), FALSE);
@@ -1345,9 +1343,9 @@ gst_curl_http_src_urihandler_get_uri (GstURIHandler * handler)
 
   GSTCURL_FUNCTION_ENTRY (source);
 
-  g_mutex_lock(source->uri_mutex);
+  g_mutex_lock (source->uri_mutex);
   ret = g_strdup (source->uri);
-  g_mutex_unlock(source->uri_mutex);
+  g_mutex_unlock (source->uri_mutex);
 
   GSTCURL_FUNCTION_EXIT (source);
   return ret;
@@ -1363,7 +1361,7 @@ gst_curl_http_src_urihandler_set_uri (GstURIHandler * handler,
   g_return_val_if_fail (GST_IS_URI_HANDLER (handler), FALSE);
   g_return_val_if_fail (uri != NULL, FALSE);
 
-  g_mutex_lock(source->uri_mutex);
+  g_mutex_lock (source->uri_mutex);
 
   if (source->uri != NULL) {
     GST_DEBUG_OBJECT (source,
@@ -1377,7 +1375,7 @@ gst_curl_http_src_urihandler_set_uri (GstURIHandler * handler,
   }
   source->retries_remaining = source->total_retries;
 
-  g_mutex_unlock(source->uri_mutex);
+  g_mutex_unlock (source->uri_mutex);
 
   GSTCURL_FUNCTION_EXIT (source);
   return TRUE;
@@ -1389,7 +1387,7 @@ gst_curl_http_src_urihandler_set_uri (GstURIHandler * handler,
 static void
 gst_curl_http_src_curl_multi_loop (gpointer thread_data)
 {
-  GstCurlHttpSrcMultiTaskContext* context;
+  GstCurlHttpSrcMultiTaskContext *context;
   GstCurlHttpSrcQueueElement *qelement;
   int i, still_running;
   gboolean cond = FALSE;
@@ -1423,8 +1421,8 @@ gst_curl_http_src_curl_multi_loop (gpointer thread_data)
      * once and should fail immediately prior.
      */
     qelement = context->queue;
-    while(qelement != NULL) {
-      if (g_mutex_trylock(&qelement->running) == TRUE) {
+    while (qelement != NULL) {
+      if (g_mutex_trylock (&qelement->running) == TRUE) {
         GSTCURL_DEBUG_PRINT ("Adding easy handle for URI %s", qelement->p->uri);
         cond = TRUE;
         curl_multi_add_handle (context->multi_handle, qelement->p->curl_handle);
@@ -1432,16 +1430,14 @@ gst_curl_http_src_curl_multi_loop (gpointer thread_data)
       qelement = qelement->next;
     }
 
-    if(cond != TRUE) {
+    if (cond != TRUE) {
       GSTCURL_WARNING_PRINT ("All curl handles already added for QUEUE_EVENT!");
-    }
-    else {
+    } else {
       GSTCURL_DEBUG_PRINT ("Finished adding all handles, continuing.");
       context->state = GSTCURL_MULTI_LOOP_STATE_RUNNING;
     }
-    g_mutex_unlock(&context->mutex);
-  }
-  else if (context->state == GSTCURL_MULTI_LOOP_STATE_RUNNING) {
+    g_mutex_unlock (&context->mutex);
+  } else if (context->state == GSTCURL_MULTI_LOOP_STATE_RUNNING) {
     struct timeval timeout;
     gint rc;
     fd_set fdread, fdwrite, fdexcep;
@@ -1451,7 +1447,7 @@ gst_curl_http_src_curl_multi_loop (gpointer thread_data)
     /* Because curl can possibly take some time here, be nice and let go of the
      * mutex so other threads can perform state/queue operations as we don't
      * care about those until the end of this. */
-    g_mutex_unlock(&context->mutex);
+    g_mutex_unlock (&context->mutex);
 
     FD_ZERO (&fdread);
     FD_ZERO (&fdwrite);
@@ -1462,29 +1458,29 @@ gst_curl_http_src_curl_multi_loop (gpointer thread_data)
 
     curl_multi_timeout (context->multi_handle, &curl_timeo);
     if (curl_timeo >= 0) {
-    timeout.tv_sec = curl_timeo / 1000;
+      timeout.tv_sec = curl_timeo / 1000;
       if (timeout.tv_sec > 1) {
         timeout.tv_sec = 1;
-      }
-      else {
+      } else {
         timeout.tv_usec = (curl_timeo % 1000) * 1000;
       }
     }
 
     /* get file descriptors from the transfers */
-    curl_multi_fdset (context->multi_handle, &fdread, &fdwrite, &fdexcep, &maxfd);
+    curl_multi_fdset (context->multi_handle, &fdread, &fdwrite, &fdexcep,
+        &maxfd);
 
     rc = select (maxfd + 1, &fdread, &fdwrite, &fdexcep, &timeout);
 
     switch (rc) {
-    case -1:
-      /* select error */
-      break;
-    case 0:
-    default:
-      /* timeout or readable/writable sockets */
-      curl_multi_perform (context->multi_handle, &still_running);
-      break;
+      case -1:
+        /* select error */
+        break;
+      case 0:
+      default:
+        /* timeout or readable/writable sockets */
+        curl_multi_perform (context->multi_handle, &still_running);
+        break;
     }
 
     /*
@@ -1497,19 +1493,18 @@ gst_curl_http_src_curl_multi_loop (gpointer thread_data)
       curl_message = curl_multi_info_read (context->multi_handle, &i);
       if (curl_message == NULL) {
         cond = TRUE;
-      }
-      else if (curl_message->msg == CURLMSG_DONE) {
+      } else if (curl_message->msg == CURLMSG_DONE) {
         /* A hack, but I have seen curl_message->easy_handle being
          * NULL randomly, so check for that. */
-        g_mutex_lock(&context->mutex);
+        g_mutex_lock (&context->mutex);
         if (curl_message->easy_handle == NULL) {
           break;
         }
         curl_multi_remove_handle (context->multi_handle,
-                                  curl_message->easy_handle);
-        gst_curl_http_src_remove_queue_handle(&context->queue,
+            curl_message->easy_handle);
+        gst_curl_http_src_remove_queue_handle (&context->queue,
             curl_message->easy_handle, curl_message->data.result);
-        g_mutex_unlock(&context->mutex);
+        g_mutex_unlock (&context->mutex);
       }
     }
 
@@ -1534,27 +1529,25 @@ gst_curl_http_src_curl_multi_loop (gpointer thread_data)
     /* Something wants us to shut down, so best to do a full cleanup as it
      * might be that something's gone bang.
      */
-    /*gst_curl_http_src_unref_multi (NULL, GSTCURL_RETURN_PIPELINE_NULL, TRUE);*/
+    /*gst_curl_http_src_unref_multi (NULL, GSTCURL_RETURN_PIPELINE_NULL, TRUE); */
     GSTCURL_INFO_PRINT ("Got instruction to shut down");
-  }
-  else if (context->state == GSTCURL_MULTI_LOOP_STATE_REQUEST_REMOVAL) {
+  } else if (context->state == GSTCURL_MULTI_LOOP_STATE_REQUEST_REMOVAL) {
     qelement = context->queue;
     while (qelement != NULL) {
       if (qelement->p == context->request_removal_element) {
-        curl_multi_remove_handle(context->multi_handle,
-                                 context->request_removal_element->curl_handle);
+        curl_multi_remove_handle (context->multi_handle,
+            context->request_removal_element->curl_handle);
         qelement->p->state = GSTCURL_REMOVED;
-        g_cond_signal(qelement->p->signal);
+        g_cond_signal (qelement->p->signal);
         gst_curl_http_src_remove_queue_item (&context->queue, qelement->p);
       }
     }
     context->request_removal_element = NULL;
     g_mutex_unlock (&context->mutex);
-  }
-  else {
+  } else {
     GSTCURL_WARNING_PRINT ("Curl Loop State was invalid or unsupported");
     GSTCURL_WARNING_PRINT ("Signal State is %d, resetting to RUNNING.",
-                           context->state);
+        context->state);
     /* Reset to running, so if there isn't anything to do it'll be
      * changed the WAIT once curl_multi_perform says it has no active
      * handles. */
@@ -1568,33 +1561,33 @@ gst_curl_http_src_curl_multi_loop (gpointer thread_data)
  */
 static size_t
 gst_curl_http_src_get_header (void *header, size_t size, size_t nmemb,
-    void * src)
+    void *src)
 {
   GstCurlHttpSrc *s = src;
   char *substr;
 
-  GST_DEBUG_OBJECT(s, "Received header: %s", (char *) header);
+  GST_DEBUG_OBJECT (s, "Received header: %s", (char *) header);
 
-  g_mutex_lock(s->buffer_mutex);
+  g_mutex_lock (s->buffer_mutex);
 
   if (s->http_headers == NULL) {
     /* Can't do anything here, so just silently swallow the header */
-    GST_DEBUG_OBJECT(s, "HTTP Headers Structure has already been sent,"
+    GST_DEBUG_OBJECT (s, "HTTP Headers Structure has already been sent,"
         " ignoring header");
-    g_mutex_unlock(s->buffer_mutex);
+    g_mutex_unlock (s->buffer_mutex);
     return size * nmemb;
   }
 
   substr = gst_curl_http_src_strcasestr (header, "HTTP");
   if (substr == header) {
     /* We have a status line! */
-    gchar ** status_line_fields;
+    gchar **status_line_fields;
 
     /* Have we already seen a status line? If so, delete any response headers */
     if (s->status_code > 0) {
       gst_structure_remove_field (s->http_headers, RESPONSE_HEADERS_NAME);
       gst_structure_set (s->http_headers, RESPONSE_HEADERS_NAME,
-          GST_TYPE_STRUCTURE, gst_structure_new_empty(RESPONSE_HEADERS_NAME),
+          GST_TYPE_STRUCTURE, gst_structure_new_empty (RESPONSE_HEADERS_NAME),
           NULL);
     }
 
@@ -1603,10 +1596,11 @@ gst_curl_http_src_get_header (void *header, size_t size, size_t nmemb,
     if (status_line_fields == NULL) {
       GST_ERROR_OBJECT (s, "Status line processing failed!");
     } else {
-      s->status_code = (guint) g_ascii_strtoll (status_line_fields[1], NULL, 10);
-      GST_INFO_OBJECT(s, "Received status %u for request for URI %s: %s",
+      s->status_code =
+          (guint) g_ascii_strtoll (status_line_fields[1], NULL, 10);
+      GST_INFO_OBJECT (s, "Received status %u for request for URI %s: %s",
           s->status_code, s->uri, status_line_fields[2]);
-      g_strfreev(status_line_fields);
+      g_strfreev (status_line_fields);
     }
   } else {
     /* Normal header line */
@@ -1614,24 +1608,24 @@ gst_curl_http_src_get_header (void *header, size_t size, size_t nmemb,
     if (header_tpl == NULL) {
       GST_ERROR_OBJECT (s, "Header processing failed! (%s)", (gchar *) header);
     } else {
-      const GValue *gv_resp_hdrs = gst_structure_get_value(s->http_headers,
+      const GValue *gv_resp_hdrs = gst_structure_get_value (s->http_headers,
           RESPONSE_HEADERS_NAME);
-      const GstStructure *response_headers = gst_value_get_structure(gv_resp_hdrs);
+      const GstStructure *response_headers =
+          gst_value_get_structure (gv_resp_hdrs);
       /* Store header key lower case (g_ascii_strdown), makes searching through
        * later on easier - end applications shouldn't care, as all HTTP headers
        * are case-insensitive */
-      gchar *header_key = g_ascii_strdown(header_tpl[0], -1);
+      gchar *header_key = g_ascii_strdown (header_tpl[0], -1);
       gchar *header_value;
 
       /* If header field already exists, append to the end */
       if (gst_structure_has_field (response_headers, header_key) == TRUE) {
-        header_value = g_strdup_printf("%s, %s",
-            g_value_get_string(
-                gst_structure_get_value(response_headers, header_key)),
-            header_tpl[1]);
+        header_value = g_strdup_printf ("%s, %s",
+            g_value_get_string (gst_structure_get_value (response_headers,
+                    header_key)), header_tpl[1]);
         gst_structure_set ((GstStructure *) response_headers, header_key,
             G_TYPE_STRING, header_value, NULL);
-        g_free(header_value);
+        g_free (header_value);
       } else {
         header_value = header_tpl[1];
         gst_structure_set ((GstStructure *) response_headers, header_key,
@@ -1639,18 +1633,18 @@ gst_curl_http_src_get_header (void *header, size_t size, size_t nmemb,
       }
 
       /* We have some special cases - deal with them here */
-      if (g_strcmp0(header_key, "content-type") == 0) {
-        gst_curl_http_src_negotiate_caps(src);
+      if (g_strcmp0 (header_key, "content-type") == 0) {
+        gst_curl_http_src_negotiate_caps (src);
       }
 
-      g_free(header_key);
-      g_strfreev(header_tpl);
+      g_free (header_key);
+      g_strfreev (header_tpl);
     }
   }
 
   s->hdrs_updated = TRUE;
 
-  g_mutex_unlock(s->buffer_mutex);
+  g_mutex_unlock (s->buffer_mutex);
 
   return size * nmemb;
 }
@@ -1681,8 +1675,7 @@ gst_curl_http_src_strcasestr (const char *haystack, const char *needle)
     }
     if (tolower (haystack[i]) == tolower (needle[j])) {
       j++;
-    }
-    else {
+    } else {
       j = 0;
     }
     i++;
@@ -1695,23 +1688,23 @@ gst_curl_http_src_strcasestr (const char *haystack, const char *needle)
  * Get chunks for currently running curl process.
  */
 static size_t
-gst_curl_http_src_get_chunks (void *chunk, size_t size, size_t nmemb,
-    void * src)
+gst_curl_http_src_get_chunks (void *chunk, size_t size, size_t nmemb, void *src)
 {
-  GstCurlHttpSrc * s = src;
+  GstCurlHttpSrc *s = src;
   size_t chunk_len = size * nmemb;
   GST_TRACE_OBJECT (s,
       "Received curl chunk for URI %s of size %d", s->uri, (int) chunk_len);
-  g_mutex_lock(s->buffer_mutex);
-  s->buffer = realloc (s->buffer, (s->buffer_len + chunk_len + 1) * sizeof (char));
+  g_mutex_lock (s->buffer_mutex);
+  s->buffer =
+      realloc (s->buffer, (s->buffer_len + chunk_len + 1) * sizeof (char));
   if (s->buffer == NULL) {
     GST_ERROR_OBJECT (s, "Realloc for cURL response message failed!\n");
     return 0;
   }
   memcpy (s->buffer + s->buffer_len, chunk, chunk_len);
   s->buffer_len += chunk_len;
-  g_cond_signal(s->signal);
-  g_mutex_unlock(s->buffer_mutex);
+  g_cond_signal (s->signal);
+  g_mutex_unlock (s->buffer_mutex);
   return chunk_len;
 }
 
@@ -1719,8 +1712,8 @@ static void
 gst_curl_http_src_request_remove (GstCurlHttpSrc * src)
 {
   GstCurlHttpSrcClass *klass = G_TYPE_INSTANCE_GET_CLASS (src,
-                                                        GST_TYPE_CURL_HTTP_SRC,
-                                                        GstCurlHttpSrcClass);
+      GST_TYPE_CURL_HTTP_SRC,
+      GstCurlHttpSrcClass);
   g_mutex_lock (&klass->multi_task_context.mutex);
 
   klass->multi_task_context.state = GSTCURL_MULTI_LOOP_STATE_REQUEST_REMOVAL;
