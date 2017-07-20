@@ -108,6 +108,12 @@ typedef struct _GstCurlHttpSrcClass GstCurlHttpSrcClass;
 typedef struct _GstCurlHttpSrcMultiTaskContext GstCurlHttpSrcMultiTaskContext;
 typedef struct _GstCurlHttpSrcQueueElement GstCurlHttpSrcQueueElement;
 
+#define HTTP_HEADERS_NAME       "http-headers"
+#define URI_NAME                "uri"
+#define REQUEST_HEADERS_NAME    "request-headers"
+#define RESPONSE_HEADERS_NAME   "response-headers"
+#define REDIRECT_URI_NAME       "redirection-uri"
+
 struct _GstCurlHttpSrcMultiTaskContext
 {
   GstTask     *task;
@@ -167,7 +173,7 @@ struct _GstCurlHttpSrc
   gchar **cookies;              /* CURLOPT_COOKIELIST */
   gint number_cookies;
   gchar *user_agent;            /* CURLOPT_USERAGENT */
-  GstStructure *extra_headers;  /* CURLOPT_HTTPHEADER */
+  GstStructure *request_headers;  /* CURLOPT_HTTPHEADER */
   struct curl_slist *slist;
   gboolean accept_compressed_encodings; /* CURLOPT_ACCEPT_ENCODING */
 
@@ -221,14 +227,12 @@ struct _GstCurlHttpSrc
   gboolean data_received;
 
   /*
-   * Response message
+   * Response Headers
    */
-  struct
-  {
-    gchar *content_type;
-  } headers;
+  GstStructure *http_headers;
   gchar *content_type;
   guint status_code;
+  gboolean hdrs_updated;
 
   CURLcode curl_result;
   char curl_errbuf[CURL_ERROR_SIZE];

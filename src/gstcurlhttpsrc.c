@@ -414,9 +414,9 @@ gst_curl_http_src_set_property (GObject * object, guint prop_id,
     case PROP_HEADERS:
       {
         const GstStructure *s = gst_value_get_structure (value);
-        if (source->extra_headers)
-          gst_structure_free (source->extra_headers);
-        source->extra_headers = s ? gst_structure_copy (s) : NULL;
+        if (source->request_headers)
+          gst_structure_free (source->request_headers);
+        source->request_headers = s ? gst_structure_copy (s) : NULL;
       }
       break;
     case PROP_COMPRESS:
@@ -509,7 +509,7 @@ gst_curl_http_src_get_property (GObject * object, guint prop_id,
       g_value_set_string (value, source->user_agent);
       break;
     case PROP_HEADERS:
-      gst_value_set_structure (value, source->extra_headers);
+      gst_value_set_structure (value, source->request_headers);
       break;
     case PROP_COMPRESS:
       g_value_set_boolean (value, source->accept_compressed_encodings);
@@ -587,7 +587,7 @@ gst_curl_http_src_init (GstCurlHttpSrc * source)
   source->cookies = NULL;
   source->user_agent = GSTCURL_HANDLE_DEFAULT_CURLOPT_USERAGENT;
   source->number_cookies = 0;
-  source->extra_headers = NULL;
+  source->request_headers = NULL;
   source->allow_3xx_redirect = GSTCURL_HANDLE_DEFAULT_CURLOPT_FOLLOWLOCATION;
   source->max_3xx_redirects = GSTCURL_HANDLE_DEFAULT_CURLOPT_MAXREDIRS;
   source->keep_alive = GSTCURL_HANDLE_DEFAULT_CURLOPT_TCP_KEEPALIVE;
@@ -617,6 +617,9 @@ gst_curl_http_src_init (GstCurlHttpSrc * source)
   source->buffer_len = 0;
   source->state = GSTCURL_NONE;
   source->status_code = 0;
+
+  source->http_headers = NULL;
+  source->hdrs_updated = FALSE;
 
   source->curl_result = CURLE_OK;
 
@@ -764,7 +767,11 @@ retry:
 
     GST_DEBUG_OBJECT (src, "Submitted request for URI %s to curl", src->uri);
 
-    ret = gst_curl_http_src_handle_response (src, outbuf);
+    src->http_headers = gst_structure_new (HTTP_HEADERS_NAME,
+            URI_NAME, G_TYPE_STRING, src->uri,
+            REQUEST_HEADERS_NAME, GST_TYPE_STRUCTURE, src->request_headers,
+            RESPONSE_HEADERS_NAME, GST_TYPE_STRUCTURE,
+                gst_structure_new_empty(RESPONSE_HEADERS_NAME), NULL);
   }
 
   /* Wait for data to become available, then punt it downstream */
@@ -835,6 +842,7 @@ retry:
       src->state = GSTCURL_NONE;
       src->transfer_begun = FALSE;
       src->status_code = 0;
+      src->hdrs_updated = FALSE;
       gst_curl_http_src_destroy_easy_handle (src);
       ret = GST_FLOW_EOS;
   } else {
@@ -919,8 +927,8 @@ gst_curl_http_src_create_easy_handle (GstCurlHttpSrc * s)
   }
 
   /* curl_slist_append dynamically allocates memory, but I need to free it */
-  if (s->extra_headers != NULL) {
-    gst_structure_foreach (s->extra_headers, _headers_to_curl_slist, &s->slist);
+  if (s->request_headers != NULL) {
+    gst_structure_foreach (s->request_headers, _headers_to_curl_slist, &s->slist);
     curl_easy_setopt(handle, CURLOPT_HTTPHEADER, s->slist);
   }
 
@@ -1055,12 +1063,36 @@ gst_curl_http_src_handle_response (GstCurlHttpSrc * src)
       GST_INFO_OBJECT(src, "Got a redirect to %s, setting as redirect URI",
                       redirect_url);
       src->redirect_uri = g_strdup(redirect_url);
+      gst_structure_remove_field (src->http_headers, REDIRECT_URI_NAME);
+      gst_structure_set (src->http_headers, REDIRECT_URI_NAME,
+          GST_TYPE_STRUCTURE, redirect_url, NULL);
     }
   }
 
   if (ret == GST_FLOW_CUSTOM_ERROR) {
+    src->hdrs_updated = FALSE;
     GSTCURL_FUNCTION_EXIT (src);
     return ret;
+  }
+
+  /* Only do this once */
+  if (src->hdrs_updated == FALSE) {
+    GSTCURL_FUNCTION_EXIT (src);
+    return GST_FLOW_OK;
+  }
+
+  /*
+   * Push all the received headers down via a sicky event
+   */
+  const GValue *response_headers = gst_structure_get_value(src->http_headers,
+              RESPONSE_HEADERS_NAME);
+  if(gst_structure_n_fields(gst_value_get_structure(response_headers)) > 0) {
+    GstEvent *hdrs_event;
+    /* gst_event_new_custom takes ownership of our structure */
+    hdrs_event = gst_event_new_custom (GST_EVENT_CUSTOM_DOWNSTREAM_STICKY,
+            src->http_headers);
+    gst_pad_push_event (GST_BASE_SRC_PAD (src), hdrs_event);
+    src->http_headers = NULL;
   }
 
   /*
@@ -1081,7 +1113,10 @@ gst_curl_http_src_handle_response (GstCurlHttpSrc * src)
     }
   }
 
+  src->hdrs_updated = FALSE;
+
   GSTCURL_FUNCTION_EXIT (src);
+
   return ret;
 }
 
@@ -1093,22 +1128,35 @@ gst_curl_http_src_handle_response (GstCurlHttpSrc * src)
 static gboolean
 gst_curl_http_src_negotiate_caps (GstCurlHttpSrc * src)
 {
-  if (src->headers.content_type != NULL) {
-    if (src->caps) {
-      GST_INFO_OBJECT (src, "Setting cap on Content-Type of %s",
-                       src->headers.content_type);
-      src->caps = gst_caps_make_writable (src->caps);
-      gst_caps_set_simple (src->caps, "content-type", G_TYPE_STRING,
-                           src->headers.content_type, NULL);
-      if (gst_base_src_set_caps(GST_BASE_SRC (src), src->caps) != TRUE) {
-        GST_ERROR_OBJECT (src, "Setting caps failed!");
+  if (src->caps && src->http_headers) {
+    const GValue *response_headers = gst_structure_get_value(src->http_headers,
+        RESPONSE_HEADERS_NAME);
+
+    if (gst_structure_has_field(
+            gst_value_get_structure(response_headers), "content-type") == TRUE)
+    {
+      const GValue *gv_content_type = gst_structure_get_value(
+                gst_value_get_structure(response_headers), "content-type");
+      if (G_VALUE_HOLDS_STRING(gv_content_type) == TRUE) {
+        const gchar *content_type = g_value_get_string(gv_content_type);
+        GST_INFO_OBJECT (src, "Setting caps as Content-Type of %s",
+                         content_type);
+        src->caps = gst_caps_make_writable (src->caps);
+        gst_caps_set_simple (src->caps, "content-type", G_TYPE_STRING,
+                             content_type, NULL);
+        if (gst_base_src_set_caps(GST_BASE_SRC (src), src->caps) != TRUE) {
+          GST_ERROR_OBJECT (src, "Setting caps failed!");
+          return FALSE;
+        }
+      } else {
+        GST_ERROR_OBJECT(src, "Content Type doesn't contain expected string");
         return FALSE;
       }
     }
+  } else {
+    GST_DEBUG_OBJECT (src, "No caps have been set, continue.");
   }
-  else {
-    GST_INFO_OBJECT (src, "No caps have been set, continue.");
-  }
+
   return TRUE;
 }
 
@@ -1200,8 +1248,10 @@ gst_curl_http_src_cleanup_instance(GstCurlHttpSrc *src)
   g_free(src->buffer);
   src->buffer = NULL;
 
-  g_free(src->headers.content_type);
-  src->headers.content_type = NULL;
+  if (src->http_headers != NULL) {
+    gst_structure_free(src->http_headers);
+    src->http_headers = NULL;
+  }
 
   gst_curl_http_src_destroy_easy_handle(src);
 }
@@ -1234,17 +1284,31 @@ static gboolean
 gst_curl_http_src_get_content_length (GstBaseSrc * bsrc, guint64 * size)
 {
   GstCurlHttpSrc *src = GST_CURLHTTPSRC (bsrc);
+  gboolean ret = FALSE;
 
-  if (src->content_length > 0) {
-    *size = src->content_length;
-    GST_DEBUG_OBJECT (src,
-                      "Returning content length size of %" G_GUINT64_FORMAT,
-                      *size);
-    return TRUE;
+  if (src->http_headers == NULL) {
+    return FALSE;
   }
+
+  const GValue *response_headers = gst_structure_get_value(src->http_headers,
+                RESPONSE_HEADERS_NAME);
+  if (gst_structure_has_field(
+          gst_value_get_structure(response_headers), "content-length") == TRUE)
+  {
+    const GValue *content_length = gst_structure_get_value(
+              gst_value_get_structure(response_headers), "content-length");
+    if (G_VALUE_HOLDS_STRING(content_length) == TRUE) {
+      const gchar *len = g_value_get_string(content_length);
+      *size = (guint64) g_ascii_strtoull(len, NULL, 10);
+      ret = TRUE;
+    } else {
+      GST_ERROR_OBJECT(src, "Content Length doesn't contain expected string");
+    }
+  }
+
   GST_DEBUG_OBJECT (src,
                   "No content length has yet been set, or there was an error!");
-  return FALSE;
+  return ret;
 }
 
 static void
@@ -1510,41 +1574,86 @@ gst_curl_http_src_get_header (void *header, size_t size, size_t nmemb,
 {
   GstCurlHttpSrc *s = src;
   char *substr;
-  int i, len;
-  /*
-   * All HTTP headers follow the same format.
-   *      <<Identifier>>: <<Value>>
-   *
-   * So just parse for those!
-   */
-  substr = gst_curl_http_src_strcasestr (header, "Content-Type: ");
-  if (substr != NULL) {
-    /*Length of stuff we don't need is 14 bytes */
-    substr += 14;
-    len = (size * nmemb) - 14;
-    if (s->headers.content_type != NULL) {
-      GST_DEBUG_OBJECT (s, "Content Type header already present.");
-      free (s->headers.content_type);
+
+  GST_DEBUG_OBJECT(s, "Received header: %s", (char *) header);
+
+  g_mutex_lock(s->buffer_mutex);
+
+  if (s->http_headers == NULL) {
+    /* Can't do anything here, so just silently swallow the header */
+    GST_DEBUG_OBJECT(s, "HTTP Headers Structure has already been sent,"
+        " ignoring header");
+    g_mutex_unlock(s->buffer_mutex);
+    return size * nmemb;
+  }
+
+  substr = gst_curl_http_src_strcasestr (header, "HTTP");
+  if (substr == header) {
+    /* We have a status line! */
+    gchar ** status_line_fields;
+
+    /* Have we already seen a status line? If so, delete any response headers */
+    if (s->status_code > 0) {
+      gst_structure_remove_field (s->http_headers, RESPONSE_HEADERS_NAME);
+      gst_structure_set (s->http_headers, RESPONSE_HEADERS_NAME,
+          GST_TYPE_STRUCTURE, gst_structure_new_empty(RESPONSE_HEADERS_NAME),
+          NULL);
     }
-    s->headers.content_type = malloc (sizeof (char) * (len + 1));
-    if (s->headers.content_type == NULL) {
-      GST_ERROR_OBJECT (s, "s->headers.content_type malloc failed!");
+
+    /* Process the status line */
+    status_line_fields = g_strsplit ((gchar *) header, " ", 3);
+    if (status_line_fields == NULL) {
+      GST_ERROR_OBJECT (s, "Status line processing failed!");
+    } else {
+      s->status_code = (guint) g_ascii_strtoll (status_line_fields[1], NULL, 10);
+      GST_INFO_OBJECT(s, "Received status %u for request for URI %s: %s",
+          s->status_code, s->uri, status_line_fields[2]);
+      g_strfreev(status_line_fields);
     }
-    else {
-      for (i = 0; i < len; i++) {
-        /* For some reason, we get garbage characters at the end, so
-         * quick and dirty bit of stripping. We only want printing
-         * characters here. Also neatly null terminates! */
-        if ((substr[i] >= 0x20) && (substr[i] < 0x7f)) {
-          s->headers.content_type[i] = substr[i];
-        }
-        else {
-          s->headers.content_type[i] = '\0';
-        }
+  } else {
+    /* Normal header line */
+    gchar **header_tpl = g_strsplit ((gchar *) header, ": ", 2);
+    if (header_tpl == NULL) {
+      GST_ERROR_OBJECT (s, "Header processing failed! (%s)", (gchar *) header);
+    } else {
+      const GValue *gv_resp_hdrs = gst_structure_get_value(s->http_headers,
+          RESPONSE_HEADERS_NAME);
+      const GstStructure *response_headers = gst_value_get_structure(gv_resp_hdrs);
+      /* Store header key lower case (g_ascii_strdown), makes searching through
+       * later on easier - end applications shouldn't care, as all HTTP headers
+       * are case-insensitive */
+      gchar *header_key = g_ascii_strdown(header_tpl[0], -1);
+      gchar *header_value;
+
+      /* If header field already exists, append to the end */
+      if (gst_structure_has_field (response_headers, header_key) == TRUE) {
+        header_value = g_strdup_printf("%s, %s",
+            g_value_get_string(
+                gst_structure_get_value(response_headers, header_key)),
+            header_tpl[1]);
+        gst_structure_set ((GstStructure *) response_headers, header_key,
+            G_TYPE_STRING, header_value, NULL);
+        g_free(header_value);
+      } else {
+        header_value = header_tpl[1];
+        gst_structure_set ((GstStructure *) response_headers, header_key,
+            G_TYPE_STRING, header_value, NULL);
       }
-      GST_INFO_OBJECT (s, "Got Content-Type of %s", s->headers.content_type);
+
+      /* We have some special cases - deal with them here */
+      if (g_strcmp0(header_key, "content-type") == 0) {
+        gst_curl_http_src_negotiate_caps(src);
+      }
+
+      g_free(header_key);
+      g_strfreev(header_tpl);
     }
   }
+
+  s->hdrs_updated = TRUE;
+
+  g_mutex_unlock(s->buffer_mutex);
+
   return size * nmemb;
 }
 
