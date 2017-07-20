@@ -141,7 +141,7 @@ gst_curl_http_src_remove_queue_item (GstCurlHttpSrcQueueElement **queue,
  */
 gboolean
 gst_curl_http_src_remove_queue_handle (GstCurlHttpSrcQueueElement **queue,
-                                       CURL *handle)
+                                       CURL *handle, CURLcode result)
 {
   GstCurlHttpSrcQueueElement *prev_qelement, *this_qelement;
 
@@ -160,8 +160,11 @@ gst_curl_http_src_remove_queue_handle (GstCurlHttpSrcQueueElement **queue,
                     "Removing queue item via curl handle for URI %s",
                     this_qelement->p->uri);*/
   /* First, signal the transfer owner thread to wake up */
-  g_cond_signal(this_qelement->p->finished);
-  this_qelement->p->result = GSTCURL_RETURN_DONE;
+  g_mutex_lock(this_qelement->p->buffer_mutex);
+  g_cond_signal(this_qelement->p->signal);
+  this_qelement->p->state = GSTCURL_DONE;
+  this_qelement->p->curl_result = result;
+  g_mutex_unlock(this_qelement->p->buffer_mutex);
 
   /* First queue item matched. */
   if (prev_qelement == NULL) {

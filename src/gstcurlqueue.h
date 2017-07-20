@@ -60,6 +60,6 @@ gboolean gst_curl_http_src_add_queue_item (GstCurlHttpSrcQueueElement **queue,
 gboolean gst_curl_http_src_remove_queue_item (
     GstCurlHttpSrcQueueElement **queue, GstCurlHttpSrc *s);
 gboolean gst_curl_http_src_remove_queue_handle (
-    GstCurlHttpSrcQueueElement **queue, CURL *handle);
+    GstCurlHttpSrcQueueElement **queue, CURL *handle, CURLcode result);
 
 #endif /* GSTCURLQUEUE_H_ */

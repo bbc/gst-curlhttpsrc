@@ -201,30 +201,37 @@ struct _GstCurlHttpSrc
     GSTCURL_HTTP_VERSION_MAX
   } preferred_http_version;     /* CURLOPT_HTTP_VERSION */
 
-  GCond *finished;
   enum
   {
-    GSTCURL_RETURN_NONE,
-    GSTCURL_RETURN_DONE,
-    GSTCURL_RETURN_REMOVED,
-    GSTCURL_RETURN_BAD_QUEUE_REQUEST,
-    GSTCURL_RETURN_TOTAL_ERROR,
-    GSTCURL_RETURN_PIPELINE_NULL,
-    GSTCURL_RETURN_MAX
-  } result;
+    GSTCURL_NONE,
+    GSTCURL_OK,
+    GSTCURL_DONE,
+    GSTCURL_REMOVED,
+    GSTCURL_BAD_QUEUE_REQUEST,
+    GSTCURL_TOTAL_ERROR,
+    GSTCURL_PIPELINE_NULL,
+    GSTCURL_MAX
+  } state;
   CURL *curl_handle;
-  gboolean end_of_message;
+  GMutex *buffer_mutex;
+  GCond *signal;
+  gchar *buffer;
+  guint buffer_len;
+  gboolean transfer_begun;
+  gboolean data_received;
 
   /*
    * Response message
    */
-  gchar *msg;
-  guint len;
-  guint64 content_length;
   struct
   {
     gchar *content_type;
   } headers;
+  gchar *content_type;
+  guint status_code;
+
+  CURLcode curl_result;
+  char curl_errbuf[CURL_ERROR_SIZE];
 
   GstCaps *caps;
 };
