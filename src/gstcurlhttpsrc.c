@@ -119,6 +119,8 @@ static void gst_curl_http_src_cleanup_instance (GstCurlHttpSrc * src);
 static gboolean gst_curl_http_src_query (GstBaseSrc * bsrc, GstQuery * query);
 static gboolean gst_curl_http_src_get_content_length (GstBaseSrc * bsrc,
     guint64 * size);
+static gboolean gst_curl_http_src_unlock (GstBaseSrc * bsrc);
+static gboolean gst_curl_http_src_unlock_stop (GstBaseSrc * bsrc);
 
 /* URI Handler functions */
 static void gst_curl_http_src_uri_handler_init (gpointer g_iface,
@@ -169,6 +171,9 @@ gst_curl_http_src_class_init (GstCurlHttpSrcClass * klass)
   gstbasesrc_class->query = GST_DEBUG_FUNCPTR (gst_curl_http_src_query);
   gstbasesrc_class->get_size =
       GST_DEBUG_FUNCPTR (gst_curl_http_src_get_content_length);
+  gstbasesrc_class->unlock = GST_DEBUG_FUNCPTR (gst_curl_http_src_unlock);
+  gstbasesrc_class->unlock_stop =
+      GST_DEBUG_FUNCPTR (gst_curl_http_src_unlock_stop);
 
   gst_element_class_add_pad_template (gstelement_class,
       gst_static_pad_template_get (&srcpadtemplate));
@@ -622,6 +627,7 @@ gst_curl_http_src_init (GstCurlHttpSrc * source)
   source->buffer = NULL;
   source->buffer_len = 0;
   source->state = GSTCURL_NONE;
+  source->pending_state = GSTCURL_NONE;
   source->status_code = 0;
 
   source->http_headers = NULL;
@@ -747,6 +753,13 @@ gst_curl_http_src_create (GstPushSrc * psrc, GstBuffer ** outbuf)
 
   GSTCURL_FUNCTION_ENTRY (src);
   ret = GST_FLOW_OK;
+
+  g_mutex_lock (&src->buffer_mutex);
+  if (src->state == GSTCURL_UNLOCK) {
+    ret = GST_FLOW_FLUSHING;
+    goto escape;
+  }
+
 retry:
   if (!src->transfer_begun) {
     GST_DEBUG_OBJECT (src, "Starting new request for URI %s", src->uri);
@@ -780,9 +793,18 @@ retry:
   }
 
   /* Wait for data to become available, then punt it downstream */
-  g_mutex_lock (&src->buffer_mutex);
   while ((src->buffer_len == 0) && (src->state == GSTCURL_OK)) {
     g_cond_wait (&src->signal, &src->buffer_mutex);
+  }
+
+  if (src->state == GSTCURL_UNLOCK) {
+    if (src->buffer_len > 0) {
+      g_free (src->buffer);
+      src->buffer = NULL;
+      src->buffer_len = 0;
+    }
+    ret = GST_FLOW_FLUSHING;
+    goto escape;
   }
 
   ret = gst_curl_http_src_handle_response (src);
@@ -1242,9 +1264,9 @@ gst_curl_http_src_cleanup_instance (GstCurlHttpSrc * src)
   g_free (src->cookies);
   src->cookies = NULL;
 
-  g_mutex_clear(&src->buffer_mutex);
+  g_mutex_clear (&src->buffer_mutex);
 
-  g_cond_clear(&src->signal);
+  g_cond_clear (&src->signal);
 
   g_free (src->buffer);
   src->buffer = NULL;
@@ -1384,6 +1406,40 @@ gst_curl_http_src_urihandler_set_uri (GstURIHandler * handler,
   g_mutex_unlock (&source->uri_mutex);
 
   GSTCURL_FUNCTION_EXIT (source);
+  return TRUE;
+}
+
+static gboolean
+gst_curl_http_src_unlock (GstBaseSrc * bsrc)
+{
+  GstCurlHttpSrc *src = GST_CURLHTTPSRC (bsrc);
+
+  g_mutex_lock (&src->buffer_mutex);
+  if (src->state != GSTCURL_UNLOCK) {
+    if (src->state == GSTCURL_OK) {
+      /* A transfer is running, cancel it */
+      gst_curl_http_src_request_remove (src);
+    }
+    src->pending_state = src->state;
+    src->state = GSTCURL_UNLOCK;
+  }
+  g_cond_signal (&src->signal);
+  g_mutex_unlock (&src->buffer_mutex);
+
+  return TRUE;
+}
+
+static gboolean
+gst_curl_http_src_unlock_stop (GstBaseSrc * bsrc)
+{
+  GstCurlHttpSrc *src = GST_CURLHTTPSRC (bsrc);
+
+  g_mutex_lock (&src->buffer_mutex);
+  src->state = src->pending_state;
+  src->pending_state = GSTCURL_NONE;
+  g_cond_signal (&src->signal);
+  g_mutex_unlock (&src->buffer_mutex);
+
   return TRUE;
 }
 
@@ -1541,11 +1597,17 @@ gst_curl_http_src_curl_multi_loop (gpointer thread_data)
     qelement = context->queue;
     while (qelement != NULL) {
       if (qelement->p == context->request_removal_element) {
+        g_mutex_lock (&qelement->p->buffer_mutex);
         curl_multi_remove_handle (context->multi_handle,
             context->request_removal_element->curl_handle);
-        qelement->p->state = GSTCURL_REMOVED;
+        if (qelement->p->state == GSTCURL_UNLOCK) {
+          qelement->p->pending_state = GSTCURL_REMOVED;
+        } else {
+          qelement->p->state = GSTCURL_REMOVED;
+        }
         g_cond_signal (&qelement->p->signal);
         gst_curl_http_src_remove_queue_item (&context->queue, qelement->p);
+        g_mutex_unlock (&qelement->p->buffer_mutex);
       }
     }
     context->request_removal_element = NULL;
@@ -1575,6 +1637,11 @@ gst_curl_http_src_get_header (void *header, size_t size, size_t nmemb,
   GST_DEBUG_OBJECT (s, "Received header: %s", (char *) header);
 
   g_mutex_lock (&s->buffer_mutex);
+
+  if (s->state == GSTCURL_UNLOCK) {
+    g_mutex_unlock (&s->buffer_mutex);
+    return size * nmemb;
+  }
 
   if (s->http_headers == NULL) {
     /* Can't do anything here, so just silently swallow the header */
@@ -1701,6 +1768,10 @@ gst_curl_http_src_get_chunks (void *chunk, size_t size, size_t nmemb, void *src)
   GST_TRACE_OBJECT (s,
       "Received curl chunk for URI %s of size %d", s->uri, (int) chunk_len);
   g_mutex_lock (&s->buffer_mutex);
+  if (s->state == GSTCURL_UNLOCK) {
+    g_mutex_unlock (&s->buffer_mutex);
+    return chunk_len;
+  }
   s->buffer =
       g_realloc (s->buffer, (s->buffer_len + chunk_len + 1) * sizeof (char));
   if (s->buffer == NULL) {

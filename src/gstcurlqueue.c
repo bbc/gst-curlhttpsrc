@@ -159,7 +159,11 @@ gst_curl_http_src_remove_queue_handle (GstCurlHttpSrcQueueElement ** queue,
   /* First, signal the transfer owner thread to wake up */
   g_mutex_lock (&this_qelement->p->buffer_mutex);
   g_cond_signal (&this_qelement->p->signal);
-  this_qelement->p->state = GSTCURL_DONE;
+  if (this_qelement->p->state != GSTCURL_UNLOCK) {
+    this_qelement->p->state = GSTCURL_DONE;
+  } else {
+    this_qelement->p->pending_state = GSTCURL_DONE;
+  }
   this_qelement->p->curl_result = result;
   g_mutex_unlock (&this_qelement->p->buffer_mutex);
 

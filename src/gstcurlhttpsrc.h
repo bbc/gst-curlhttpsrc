@@ -212,12 +212,13 @@ struct _GstCurlHttpSrc
     GSTCURL_NONE,
     GSTCURL_OK,
     GSTCURL_DONE,
+    GSTCURL_UNLOCK,
     GSTCURL_REMOVED,
     GSTCURL_BAD_QUEUE_REQUEST,
     GSTCURL_TOTAL_ERROR,
     GSTCURL_PIPELINE_NULL,
     GSTCURL_MAX
-  } state;
+  } state, pending_state;
   CURL *curl_handle;
   GMutex buffer_mutex;
   GCond signal;
