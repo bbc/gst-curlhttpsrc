@@ -1702,7 +1702,7 @@ gst_curl_http_src_get_chunks (void *chunk, size_t size, size_t nmemb, void *src)
       "Received curl chunk for URI %s of size %d", s->uri, (int) chunk_len);
   g_mutex_lock (&s->buffer_mutex);
   s->buffer =
-      realloc (s->buffer, (s->buffer_len + chunk_len + 1) * sizeof (char));
+      g_realloc (s->buffer, (s->buffer_len + chunk_len + 1) * sizeof (char));
   if (s->buffer == NULL) {
     GST_ERROR_OBJECT (s, "Realloc for cURL response message failed!\n");
     return 0;
