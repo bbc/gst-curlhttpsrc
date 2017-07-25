@@ -1134,6 +1134,11 @@ gst_curl_http_src_handle_response (GstCurlHttpSrc * src)
       RESPONSE_HEADERS_NAME);
   if (gst_structure_n_fields (gst_value_get_structure (response_headers)) > 0) {
     GstEvent *hdrs_event;
+
+    gst_element_post_message (GST_ELEMENT_CAST (src),
+        gst_message_new_element (GST_OBJECT_CAST (src),
+            gst_structure_copy (src->http_headers)));
+
     /* gst_event_new_custom takes ownership of our structure */
     hdrs_event = gst_event_new_custom (GST_EVENT_CUSTOM_DOWNSTREAM_STICKY,
         src->http_headers);
@@ -1678,6 +1683,8 @@ gst_curl_http_src_get_header (void *header, size_t size, size_t nmemb,
           (guint) g_ascii_strtoll (status_line_fields[1], NULL, 10);
       GST_INFO_OBJECT (s, "Received status %u for request for URI %s: %s",
           s->status_code, s->uri, status_line_fields[2]);
+      gst_structure_set (s->http_headers, HTTP_STATUS_CODE,
+          G_TYPE_UINT, s->status_code, NULL);
       g_strfreev (status_line_fields);
     }
   } else {

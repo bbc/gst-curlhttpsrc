@@ -109,6 +109,7 @@ typedef struct _GstCurlHttpSrcMultiTaskContext GstCurlHttpSrcMultiTaskContext;
 typedef struct _GstCurlHttpSrcQueueElement GstCurlHttpSrcQueueElement;
 
 #define HTTP_HEADERS_NAME       "http-headers"
+#define HTTP_STATUS_CODE        "http-status-code"
 #define URI_NAME                "uri"
 #define REQUEST_HEADERS_NAME    "request-headers"
 #define RESPONSE_HEADERS_NAME   "response-headers"
