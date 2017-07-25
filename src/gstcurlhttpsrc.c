@@ -1078,6 +1078,18 @@ gst_curl_http_src_handle_response (GstCurlHttpSrc * src)
   }
 
 
+  if (ret == GST_FLOW_CUSTOM_ERROR) {
+    src->hdrs_updated = FALSE;
+    GSTCURL_FUNCTION_EXIT (src);
+    return ret;
+  }
+
+  /* Only do this once */
+  if (src->hdrs_updated == FALSE) {
+    GSTCURL_FUNCTION_EXIT (src);
+    return GST_FLOW_OK;
+  }
+
   /*
    * Deal with redirections...
    */
@@ -1094,34 +1106,8 @@ gst_curl_http_src_handle_response (GstCurlHttpSrc * src)
       src->redirect_uri = g_strdup (redirect_url);
       gst_structure_remove_field (src->http_headers, REDIRECT_URI_NAME);
       gst_structure_set (src->http_headers, REDIRECT_URI_NAME,
-          GST_TYPE_STRUCTURE, redirect_url, NULL);
+          G_TYPE_STRING, redirect_url, NULL);
     }
-  }
-
-  if (ret == GST_FLOW_CUSTOM_ERROR) {
-    src->hdrs_updated = FALSE;
-    GSTCURL_FUNCTION_EXIT (src);
-    return ret;
-  }
-
-  /* Only do this once */
-  if (src->hdrs_updated == FALSE) {
-    GSTCURL_FUNCTION_EXIT (src);
-    return GST_FLOW_OK;
-  }
-
-  /*
-   * Push all the received headers down via a sicky event
-   */
-  response_headers = gst_structure_get_value (src->http_headers,
-      RESPONSE_HEADERS_NAME);
-  if (gst_structure_n_fields (gst_value_get_structure (response_headers)) > 0) {
-    GstEvent *hdrs_event;
-    /* gst_event_new_custom takes ownership of our structure */
-    hdrs_event = gst_event_new_custom (GST_EVENT_CUSTOM_DOWNSTREAM_STICKY,
-        src->http_headers);
-    gst_pad_push_event (GST_BASE_SRC_PAD (src), hdrs_event);
-    src->http_headers = NULL;
   }
 
   /*
@@ -1139,6 +1125,25 @@ gst_curl_http_src_handle_response (GstCurlHttpSrc * src)
       gst_element_post_message (GST_ELEMENT (src),
           gst_message_new_duration_changed (GST_OBJECT (src)));
     }
+  }
+
+  /*
+   * Push all the received headers down via a sicky event
+   */
+  response_headers = gst_structure_get_value (src->http_headers,
+      RESPONSE_HEADERS_NAME);
+  if (gst_structure_n_fields (gst_value_get_structure (response_headers)) > 0) {
+    GstEvent *hdrs_event;
+    /* gst_event_new_custom takes ownership of our structure */
+    hdrs_event = gst_event_new_custom (GST_EVENT_CUSTOM_DOWNSTREAM_STICKY,
+        src->http_headers);
+    gst_pad_push_event (GST_BASE_SRC_PAD (src), hdrs_event);
+    GST_INFO_OBJECT (src, "Pushed headers downstream");
+    src->http_headers = gst_structure_new (HTTP_HEADERS_NAME,
+            URI_NAME, G_TYPE_STRING, src->uri,
+            REQUEST_HEADERS_NAME, GST_TYPE_STRUCTURE, src->request_headers,
+            RESPONSE_HEADERS_NAME, GST_TYPE_STRUCTURE,
+            gst_structure_new_empty (RESPONSE_HEADERS_NAME), NULL);
   }
 
   src->hdrs_updated = FALSE;
