@@ -741,6 +741,11 @@ gst_curl_http_src_finalize (GObject * obj)
   GSTCURL_FUNCTION_EXIT (src);
 }
 
+/*
+ * Do the transfer. If the transfer hasn't begun yet, start a new curl handle
+ * and pass it to the multi queue to be operated on. Then wait for any blocks
+ * of data and push them to the source pad.
+ */
 static GstFlowReturn
 gst_curl_http_src_create (GstPushSrc * psrc, GstBuffer ** outbuf)
 {
@@ -902,6 +907,10 @@ escape:
   return ret;
 }
 
+/*
+ * Convert header from a GstStructure type to a curl_slist type that curl will
+ * understand.
+ */
 static gboolean
 _headers_to_curl_slist (GQuark field_id, const GValue * value, gpointer ptr)
 {
@@ -1017,6 +1026,11 @@ gst_curl_http_src_create_easy_handle (GstCurlHttpSrc * s)
   return handle;
 }
 
+/*
+ * Check the return type from the curl transfer. If it was okay, then deal with
+ * any headers that were received. Headers should only be dealt with once - but
+ * we might get a second set if there are trailing headers (RFC7230 Section 4.4)
+ */
 static GstFlowReturn
 gst_curl_http_src_handle_response (GstCurlHttpSrc * src)
 {
@@ -1419,6 +1433,10 @@ gst_curl_http_src_urihandler_set_uri (GstURIHandler * handler,
   return TRUE;
 }
 
+/*
+ * Cancel any currently running transfer, and then signal all the loops to drop
+ * any received buffers. The ::create() method should return GST_FLOW_FLUSHING.
+ */
 static gboolean
 gst_curl_http_src_unlock (GstBaseSrc * bsrc)
 {
@@ -1439,6 +1457,11 @@ gst_curl_http_src_unlock (GstBaseSrc * bsrc)
   return TRUE;
 }
 
+/*
+ * Finish the unlock request above and return curlhttpsrc to the normal state.
+ * This will probably be GSTCURL_DONE, and the next return from ::create() will
+ * be GST_FLOW_EOS as we don't want to deliver parts of a HTTP body.
+ */
 static gboolean
 gst_curl_http_src_unlock_stop (GstBaseSrc * bsrc)
 {
@@ -1635,7 +1658,9 @@ gst_curl_http_src_curl_multi_loop (gpointer thread_data)
 }
 
 /*
- * Function to get individual headers from curl response.
+ * Receive headers from the remote server and put them into the http_headers
+ * structure to be sent downstream when we've got them all and started receiving
+ * the body (see ::_handle_response())
  */
 static size_t
 gst_curl_http_src_get_header (void *header, size_t size, size_t nmemb,
@@ -1770,7 +1795,8 @@ gst_curl_http_src_strcasestr (const char *haystack, const char *needle)
 }
 
 /*
- * Get chunks for currently running curl process.
+ * Receive chunks of the requested body and pass these back to the ::create()
+ * loop
  */
 static size_t
 gst_curl_http_src_get_chunks (void *chunk, size_t size, size_t nmemb, void *src)
@@ -1797,6 +1823,9 @@ gst_curl_http_src_get_chunks (void *chunk, size_t size, size_t nmemb, void *src)
   return chunk_len;
 }
 
+/*
+ * Request a cancellation of a currently running curl handle.
+ */
 static void
 gst_curl_http_src_request_remove (GstCurlHttpSrc * src)
 {
