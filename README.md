@@ -10,6 +10,9 @@ URIs, meaning as long as other gstreamer elements or applications use the
 URIHandler interface, they need not be changed to support this module as
 opposed to using any others.
 
+**UPDATE 2017-07-26:** GstCurlHttpSrc is now merged into gst-plugins-bad, and
+should be available in the 1.14.0 stable release later this year.
+
 ## Getting Started
 
 **GstCurlHttpSrc** requires [GStreamer](http://gstreamer.freedesktop.org/) 1.x
